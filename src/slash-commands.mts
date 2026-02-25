@@ -19,6 +19,7 @@ import { join } from "path";
 import * as vscode from "vscode";
 import { updateStatusBar } from "./status-bar.mjs";
 import { cleanupSessionSubscription, state } from "./state.mjs";
+import { createResourceLoader } from "./session.mjs";
 
 // ── Router ───────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ async function slashNew(
 		const settingsManager = SettingsManager.create(workspaceFolder);
 		const sessionManager = SessionManager.create(workspaceFolder);
 		sessionManager.newSession();
+		const resourceLoader = await createResourceLoader(workspaceFolder, settingsManager);
 
 		const { session } = await createAgentSession({
 			cwd: workspaceFolder,
@@ -70,6 +72,7 @@ async function slashNew(
 			modelRegistry,
 			settingsManager,
 			sessionManager,
+			resourceLoader,
 		});
 
 		cleanupSessionSubscription();
@@ -124,6 +127,7 @@ async function slashResume(
 		const authStorage = AuthStorage.create();
 		const modelRegistry = new ModelRegistry(authStorage);
 		const settingsManager = SettingsManager.create(workspaceFolder);
+		const resourceLoader = await createResourceLoader(workspaceFolder, settingsManager);
 
 		const { session, modelFallbackMessage } = await createAgentSession({
 			cwd: workspaceFolder,
@@ -131,6 +135,7 @@ async function slashResume(
 			modelRegistry,
 			settingsManager,
 			sessionManager,
+			resourceLoader,
 		});
 
 		cleanupSessionSubscription();

@@ -10,6 +10,7 @@
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import * as vscode from "vscode";
 import { handleSessionEvent } from "./event-handler.mjs";
+import { resolveReferences } from "./references.mjs";
 import { handleSlashCommand } from "./slash-commands.mjs";
 import { initSession } from "./session.mjs";
 import { updateStatusBar } from "./status-bar.mjs";
@@ -57,12 +58,36 @@ export async function handleChatRequest(
 
 	const session = state.currentSession!;
 
+	// Resolve attached references (files, selections, etc.) into text + images
+	if (request.references.length > 0) {
+		state.outputChannel.appendLine(
+			`Resolving ${request.references.length} reference(s): ${request.references.map((r) => r.id).join(", ")}`,
+		);
+	}
+	const { contextText, images } = await resolveReferences(
+		request.references,
+		workspaceFolder,
+	);
+
+	// Build the full prompt: attached context (if any) + user text
+	const fullPrompt = contextText
+		? `${contextText}\n\n${request.prompt}`
+		: request.prompt;
+
+	const promptOptions = images.length > 0 ? { images } : undefined;
+
+	if (contextText) {
+		state.outputChannel.appendLine(
+			`Resolved ${request.references.length} reference(s), ${images.length} image(s)`,
+		);
+	}
+
 	// If the agent is already streaming, queue the message as a follow-up and
 	// redirect future events to this new response stream so the user sees output.
 	if (session.isStreaming) {
 		state.activeResponse = response;
 		state.activeToolCalls = new Map();
-		await session.prompt(request.prompt, { streamingBehavior: "followUp" });
+		await session.prompt(fullPrompt, { ...promptOptions, streamingBehavior: "followUp" });
 		const queuedCount = session.pendingMessageCount;
 		response.markdown(
 			`> **Queued** · message will be sent after the current response completes (${queuedCount} in queue)\n\n`,
@@ -120,7 +145,7 @@ export async function handleChatRequest(
 
 	try {
 		// Send prompt to agent — this awaits the full turn including tool calls and follow-ups
-		await session.prompt(request.prompt);
+		await session.prompt(fullPrompt, promptOptions);
 		state.outputChannel.appendLine("Prompt completed successfully");
 		return { metadata: { success: true } };
 	} catch (err) {

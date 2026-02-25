@@ -21,6 +21,7 @@ import { join } from "path";
 import * as vscode from "vscode";
 import { updateStatusBar } from "./status-bar.mjs";
 import { cleanupSessionSubscription, state } from "./state.mjs";
+import { createResourceLoader } from "./session.mjs";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ export async function cmdNewSession(): Promise<void> {
 		const settingsManager = SettingsManager.create(workspaceFolder);
 		const sessionManager = SessionManager.create(workspaceFolder);
 		sessionManager.newSession();
+		const resourceLoader = await createResourceLoader(workspaceFolder, settingsManager);
 
 		const { session } = await createAgentSession({
 			cwd: workspaceFolder,
@@ -46,6 +48,7 @@ export async function cmdNewSession(): Promise<void> {
 			modelRegistry,
 			settingsManager,
 			sessionManager,
+			resourceLoader,
 		});
 
 		cleanupSessionSubscription();
@@ -93,6 +96,7 @@ export async function cmdResumeSession(): Promise<void> {
 		const authStorage = AuthStorage.create();
 		const modelRegistry = new ModelRegistry(authStorage);
 		const settingsManager = SettingsManager.create(workspaceFolder);
+		const resourceLoader = await createResourceLoader(workspaceFolder, settingsManager);
 
 		const { session, modelFallbackMessage } = await createAgentSession({
 			cwd: workspaceFolder,
@@ -100,6 +104,7 @@ export async function cmdResumeSession(): Promise<void> {
 			modelRegistry,
 			settingsManager,
 			sessionManager,
+			resourceLoader,
 		});
 
 		cleanupSessionSubscription();
