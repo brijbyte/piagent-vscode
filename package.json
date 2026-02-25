@@ -2,7 +2,7 @@
   "name": "piagent-vscode",
   "displayName": "PiAgent - AI Coding Agent",
   "description": "AI coding agent for VSCode Chat. Read, write, edit files and run bash commands using Claude, GPT-4, Gemini, and 10+ LLM providers. No permission prompts - tools execute directly. Uses the same shared configuration as the pi CLI.",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "publisher": "brijbyte",
   "author": {
     "name": "BrijByte",
@@ -174,7 +174,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "esbuild src/extension.mts --bundle --outfile=dist/extension.js --external:vscode --external:koffi --external:@mariozechner/clipboard --format=cjs --platform=node --inject:src/import-meta-polyfill.js --define:import.meta.url=importMetaUrl",
+    "build": "esbuild src/extension.mts --bundle --outfile=dist/extension.js --external:vscode --external:koffi --external:@mariozechner/clipboard --format=cjs --platform=node --inject:src/import-meta-polyfill.js --define:import.meta.url=importMetaUrl --minify",
     "build:watch": "npm run build -- --watch",
     "package": "vsce package --no-dependencies",
     "check": "tsc --noEmit"
