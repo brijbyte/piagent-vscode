@@ -1,0 +1,155 @@
+{
+  "name": "piagent-vscode",
+  "displayName": "PiAgent - AI Coding Agent",
+  "description": "AI coding agent for VSCode Chat. Read, write, edit files and run bash commands using Claude, GPT-4, Gemini, and 10+ LLM providers. No permission prompts - tools execute directly. Uses the same shared configuration as the pi CLI.",
+  "version": "0.1.1",
+  "publisher": "brijbyte",
+  "author": {
+    "name": "BrijByte",
+    "url": "https://github.com/brijbyte"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/brijbyte/piagent-vscode#readme",
+  "bugs": {
+    "url": "https://github.com/brijbyte/piagent-vscode/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brijbyte/piagent-vscode"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "ai",
+    "ai-agent",
+    "coding-agent",
+    "coding-assistant",
+    "chat-participant",
+    "llm",
+    "claude",
+    "anthropic",
+    "openai",
+    "gpt-4",
+    "gemini",
+    "bedrock",
+    "deepseek",
+    "groq",
+    "mistral",
+    "openrouter",
+    "copilot-alternative",
+    "code-generation",
+    "developer-tools",
+    "file-editing",
+    "bash",
+    "terminal",
+    "multi-provider",
+    "session-management"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "media/icon.png",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "piagent.agent",
+        "fullName": "PiAgent",
+        "name": "piagent",
+        "description": "AI coding agent with read, bash, edit, write tools",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "new",
+            "description": "Start a new session"
+          },
+          {
+            "name": "resume",
+            "description": "Resume a previous session"
+          },
+          {
+            "name": "model",
+            "description": "Select a different model"
+          },
+          {
+            "name": "compact",
+            "description": "Compact the session context"
+          },
+          {
+            "name": "session",
+            "description": "Show session info and stats"
+          },
+          {
+            "name": "login",
+            "description": "Login with an OAuth provider"
+          },
+          {
+            "name": "logout",
+            "description": "Logout from an OAuth provider"
+          },
+          {
+            "name": "help",
+            "description": "Show available commands"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "piagent.newSession",
+        "title": "PiAgent: New Session"
+      },
+      {
+        "command": "piagent.resumeSession",
+        "title": "PiAgent: Resume Session"
+      },
+      {
+        "command": "piagent.selectModel",
+        "title": "PiAgent: Select Model"
+      },
+      {
+        "command": "piagent.login",
+        "title": "PiAgent: Login"
+      },
+      {
+        "command": "piagent.logout",
+        "title": "PiAgent: Logout"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "piagent.selectModel",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m"
+      }
+    ]
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "esbuild src/extension.mts --bundle --outfile=dist/extension.js --external:vscode --external:koffi --external:@mariozechner/clipboard --format=cjs --platform=node --inject:src/import-meta-polyfill.js --define:import.meta.url=importMetaUrl",
+    "build:watch": "npm run build -- --watch",
+    "package": "vsce package --no-dependencies",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.55.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/vscode": "^1.100.0",
+    "@vscode/vsce": "^3.5.0",
+    "esbuild": "^0.25.5",
+    "typescript": "^5.7.3"
+  }
+}
