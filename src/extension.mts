@@ -3,6 +3,7 @@ import { getOAuthProviders } from "@mariozechner/pi-ai";
 import {
 	type AgentSession,
 	type AgentSessionEvent,
+	type ContextUsage,
 	AuthStorage,
 	createAgentSession,
 	getAgentDir,
@@ -17,20 +18,22 @@ import * as vscode from "vscode";
 let outputChannel: vscode.OutputChannel;
 let currentSession: AgentSession | undefined;
 let currentWorkspaceFolder: string | undefined;
-let statusBarItem: vscode.StatusBarItem;
+let statusBarItem: vscode.StatusBarItem | undefined;
+let extensionContext: vscode.ExtensionContext;
+
+// Active response stream — events are routed to whichever stream is current.
+// When a new request comes in, we swap the stream so events flow to the latest bubble.
+let activeResponse: vscode.ChatResponseStream | undefined;
+let activeToolCalls: Map<string, { name: string; args: string }> = new Map();
+let sessionUnsubscribe: (() => void) | undefined;
 
 // Pending status to show in next chat response
 let pendingSessionStatus: string | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
+	extensionContext = context;
 	outputChannel = vscode.window.createOutputChannel("PiAgent");
 	outputChannel.appendLine("PiAgent extension activated");
-
-	// Create status bar item
-	statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	statusBarItem.command = "piagent.selectModel";
-	statusBarItem.tooltip = "Click to change PiAgent model";
-	updateStatusBar();
 
 	// Register chat participant
 	const participant = vscode.chat.createChatParticipant("piagent.agent", handleChatRequest);
@@ -39,12 +42,17 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		participant,
 		outputChannel,
-		statusBarItem,
 		vscode.commands.registerCommand("piagent.newSession", cmdNewSession),
 		vscode.commands.registerCommand("piagent.resumeSession", cmdResumeSession),
 		vscode.commands.registerCommand("piagent.selectModel", cmdSelectModel),
 		vscode.commands.registerCommand("piagent.login", cmdLogin),
 		vscode.commands.registerCommand("piagent.logout", cmdLogout),
+		// Re-render status bar when the user changes piagent.statusBar.show
+		vscode.workspace.onDidChangeConfiguration((e) => {
+			if (e.affectsConfiguration("piagent.statusBar.show")) {
+				updateStatusBar();
+			}
+		}),
 	);
 
 	outputChannel.appendLine("Chat participant registered: piagent.agent");
@@ -52,22 +60,161 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
 	outputChannel?.appendLine("PiAgent extension deactivated");
+	cleanupSessionSubscription();
 	currentSession = undefined;
+}
+
+/** Clean up the global event subscription when switching/replacing sessions. */
+function cleanupSessionSubscription(): void {
+	if (sessionUnsubscribe) {
+		sessionUnsubscribe();
+		sessionUnsubscribe = undefined;
+	}
+	activeResponse = undefined;
+	activeToolCalls = new Map();
 }
 
 // ============================================================================
 // Status Bar
 // ============================================================================
 
-function updateStatusBar(): void {
-	if (currentSession?.model) {
-		const model = currentSession.model;
-		statusBarItem.text = `$(robot) ${model.id}`;
-		statusBarItem.show();
-	} else {
-		statusBarItem.text = "$(robot) PiAgent: No model";
-		statusBarItem.show();
+/**
+ * Format token counts for compact display (matches CLI footer style).
+ * Examples: 141 → "141", 26000 → "26k", 7800000 → "7.8M"
+ */
+function formatTokens(count: number): string {
+	if (count < 1000) return count.toString();
+	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
+	if (count < 1000000) return `${Math.round(count / 1000)}k`;
+	if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
+	return `${Math.round(count / 1000000)}M`;
+}
+
+/** Status bar item visibility keys, controlled by piagent.statusBar.show setting. */
+type StatusBarItem =
+	| "inputTokens"
+	| "outputTokens"
+	| "cacheRead"
+	| "cacheWrite"
+	| "cost"
+	| "contextUsage";
+
+function getStatusBarItemOrder(): StatusBarItem[] {
+	const config = vscode.workspace.getConfiguration("piagent");
+	return config.get<StatusBarItem[]>("statusBar.show", [
+		"inputTokens",
+		"outputTokens",
+		"cacheRead",
+		"cacheWrite",
+		"cost",
+		"contextUsage",
+	]);
+}
+
+function ensureStatusBar(): vscode.StatusBarItem {
+	if (!statusBarItem) {
+		statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+		statusBarItem.command = "piagent.selectModel";
+		statusBarItem.tooltip = "Click to change PiAgent model";
+		extensionContext.subscriptions.push(statusBarItem);
 	}
+	return statusBarItem;
+}
+
+function updateStatusBar(): void {
+	if (!statusBarItem && !currentSession) {
+		// Don't create the status bar until PiAgent has been used
+		return;
+	}
+
+	const bar = ensureStatusBar();
+
+	if (!currentSession?.model) {
+		bar.text = "$(robot) PiAgent: No model";
+		bar.tooltip = "Click to change PiAgent model";
+		bar.show();
+		return;
+	}
+
+	const model = currentSession.model;
+	const itemOrder = getStatusBarItemOrder();
+
+	// Calculate cumulative usage from ALL session entries
+	let totalInput = 0;
+	let totalOutput = 0;
+	let totalCacheRead = 0;
+	let totalCacheWrite = 0;
+	let totalCost = 0;
+
+	for (const entry of currentSession.sessionManager.getEntries()) {
+		if (entry.type === "message" && entry.message.role === "assistant") {
+			totalInput += entry.message.usage.input;
+			totalOutput += entry.message.usage.output;
+			totalCacheRead += entry.message.usage.cacheRead;
+			totalCacheWrite += entry.message.usage.cacheWrite;
+			totalCost += entry.message.usage.cost.total;
+		}
+	}
+
+	const hasUsage = totalInput > 0 || totalOutput > 0;
+
+	// Build a map of all available parts, then assemble in setting order
+	const availableParts = new Map<StatusBarItem, string>();
+
+	if (hasUsage) {
+		if (totalInput) availableParts.set("inputTokens", `↑${formatTokens(totalInput)}`);
+		if (totalOutput) availableParts.set("outputTokens", `↓${formatTokens(totalOutput)}`);
+		if (totalCacheRead) availableParts.set("cacheRead", `R${formatTokens(totalCacheRead)}`);
+		if (totalCacheWrite) availableParts.set("cacheWrite", `W${formatTokens(totalCacheWrite)}`);
+
+		const usingSubscription = currentSession.modelRegistry.isUsingOAuth(model);
+		if (totalCost || usingSubscription) {
+			availableParts.set("cost", `$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`);
+		}
+	}
+
+	// Context usage is available even before usage data (shows ?/window)
+	const contextUsageData: ContextUsage | undefined = currentSession.getContextUsage();
+	const contextWindow = contextUsageData?.contextWindow ?? model.contextWindow ?? 0;
+	if (contextWindow > 0) {
+		const autoIndicator = currentSession.autoCompactionEnabled ? " (auto)" : "";
+		if (contextUsageData?.percent != null) {
+			availableParts.set("contextUsage", `${contextUsageData.percent.toFixed(1)}%/${formatTokens(contextWindow)}${autoIndicator}`);
+		} else {
+			availableParts.set("contextUsage", `?/${formatTokens(contextWindow)}${autoIndicator}`);
+		}
+	}
+
+	// Assemble parts in the order specified by the setting
+	const parts: string[] = [];
+	for (const item of itemOrder) {
+		const text = availableParts.get(item);
+		if (text) parts.push(text);
+	}
+
+	const statsStr = parts.length > 0 ? ` / ${parts.join(" / ")}` : "";
+	bar.text = `$(robot) ${model.id}${statsStr}`;
+
+	// Build a detailed tooltip (always shows everything regardless of setting)
+	const tooltipLines = [`Model: ${model.provider}/${model.id}`];
+	if (hasUsage) {
+		tooltipLines.push("");
+		tooltipLines.push(`Input tokens: ${totalInput.toLocaleString()}`);
+		tooltipLines.push(`Output tokens: ${totalOutput.toLocaleString()}`);
+		if (totalCacheRead) tooltipLines.push(`Cache read: ${totalCacheRead.toLocaleString()}`);
+		if (totalCacheWrite) tooltipLines.push(`Cache write: ${totalCacheWrite.toLocaleString()}`);
+		tooltipLines.push(`Cost: $${totalCost.toFixed(3)}`);
+
+		const contextUsage: ContextUsage | undefined = currentSession.getContextUsage();
+		if (contextUsage?.percent != null) {
+			tooltipLines.push(`Context: ${contextUsage.percent.toFixed(1)}%`);
+		}
+	}
+	tooltipLines.push("");
+	tooltipLines.push("Click to change model");
+
+	bar.tooltip = tooltipLines.join("\n");
+	bar.show();
 }
 
 // ============================================================================
@@ -101,6 +248,7 @@ async function handleChatRequest(
 		try {
 			response.progress("Initializing PiAgent...");
 			const result = await initSession(workspaceFolder);
+			cleanupSessionSubscription();
 			currentSession = result.session;
 			currentWorkspaceFolder = workspaceFolder;
 			updateStatusBar();
@@ -113,38 +261,79 @@ async function handleChatRequest(
 		}
 	}
 
-	// Handle cancellation
-	let aborted = false;
-	token.onCancellationRequested(() => {
-		aborted = true;
-		currentSession?.abort();
-		outputChannel.appendLine("Request cancelled by user");
+	// If the agent is already streaming, queue the message as a follow-up and
+	// redirect future events to this new response stream so the user sees output.
+	if (currentSession.isStreaming) {
+		activeResponse = response;
+		activeToolCalls = new Map();
+		await currentSession.prompt(request.prompt, { streamingBehavior: "followUp" });
+		const queuedCount = currentSession.pendingMessageCount;
+		response.markdown(`> **Queued** · message will be sent after the current response completes (${queuedCount} in queue)\n\n`);
+		outputChannel.appendLine(`Message queued as follow-up (${queuedCount} in queue): "${request.prompt.slice(0, 50)}..."`);
+
+		// Wait for the agent to finish (including our queued follow-up).
+		// This keeps the response stream alive so events can render into it.
+		return new Promise<vscode.ChatResult>((resolve) => {
+			const checkDone = () => {
+				if (!currentSession?.isStreaming) {
+					resolve({ metadata: { success: true } });
+				} else {
+					setTimeout(checkDone, 100);
+				}
+			};
+			token.onCancellationRequested(() => {
+				// New message came in while we're waiting — detach from this stream
+				if (activeResponse === response) {
+					activeResponse = undefined;
+				}
+				resolve({ metadata: { cancelled: true } });
+			});
+			checkDone();
+		});
+	}
+
+	// This is the primary request — set up the global response stream and subscribe.
+	activeResponse = response;
+	activeToolCalls = new Map();
+
+	// Ensure a single global subscription to session events.
+	// If one already exists (shouldn't happen since isStreaming was false), clean it up.
+	if (sessionUnsubscribe) {
+		sessionUnsubscribe();
+	}
+	sessionUnsubscribe = currentSession.subscribe((event: AgentSessionEvent) => {
+		if (!activeResponse) return;
+		handleSessionEvent(event, activeResponse, activeToolCalls);
 	});
 
-	// Track streaming state
-	const toolCallsInProgress = new Map<string, { name: string; args: string }>();
-
-	// Subscribe to session events
-	const unsubscribe = currentSession.subscribe((event: AgentSessionEvent) => {
-		handleSessionEvent(event, response, toolCallsInProgress);
+	token.onCancellationRequested(() => {
+		// VSCode cancelled this request (user sent a new message).
+		// Don't abort the session — just detach from this response stream.
+		// The new request handler will attach the new response stream.
+		if (activeResponse === response) {
+			activeResponse = undefined;
+		}
+		outputChannel.appendLine("Response stream closed by VSCode (user sent a new message or cancelled)");
 	});
 
 	try {
-		// Send prompt to agent
+		// Send prompt to agent — this awaits the full turn including tool calls and follow-ups
 		await currentSession.prompt(request.prompt);
 		outputChannel.appendLine("Prompt completed successfully");
 		return { metadata: { success: true } };
 	} catch (err) {
-		if (aborted) {
-			response.markdown("\n\n*Request cancelled*");
-			return { metadata: { cancelled: true } };
-		}
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		outputChannel.appendLine(`Error during prompt: ${errorMsg}`);
-		response.markdown(`\n\n**Error:** ${errorMsg}`);
+		if (activeResponse === response) {
+			response.markdown(`\n\n**Error:** ${errorMsg}`);
+		}
 		return { metadata: { error: true } };
 	} finally {
-		unsubscribe();
+		// Only clean up the subscription if this response is still the active one.
+		// If a newer request took over, it owns the subscription now.
+		if (activeResponse === response) {
+			activeResponse = undefined;
+		}
 	}
 }
 
@@ -197,6 +386,7 @@ async function slashNew(response: vscode.ChatResponseStream, workspaceFolder: st
 			sessionManager,
 		});
 
+		cleanupSessionSubscription();
 		currentSession = session;
 		currentWorkspaceFolder = workspaceFolder;
 		updateStatusBar();
@@ -252,6 +442,7 @@ async function slashResume(response: vscode.ChatResponseStream, workspaceFolder:
 			sessionManager,
 		});
 
+		cleanupSessionSubscription();
 		currentSession = session;
 		currentWorkspaceFolder = workspaceFolder;
 		updateStatusBar();
@@ -621,8 +812,20 @@ function handleSessionEvent(
 			break;
 		}
 
+		case "message_end": {
+			// Update status bar with latest token usage after each assistant message
+			updateStatusBar();
+			break;
+		}
+
 		case "auto_compaction_start": {
 			response.progress(`Compacting context (${event.reason})...`);
+			break;
+		}
+
+		case "auto_compaction_end": {
+			// Context usage changes after compaction
+			updateStatusBar();
 			break;
 		}
 
@@ -703,6 +906,7 @@ async function cmdNewSession(): Promise<void> {
 			sessionManager,
 		});
 
+		cleanupSessionSubscription();
 		currentSession = session;
 		updateStatusBar();
 		const model = session.model ? `${session.model.provider}/${session.model.id}` : "no model";
@@ -754,6 +958,7 @@ async function cmdResumeSession(): Promise<void> {
 			sessionManager,
 		});
 
+		cleanupSessionSubscription();
 		currentSession = session;
 		updateStatusBar();
 		const model = session.model ? `${session.model.provider}/${session.model.id}` : "no model";

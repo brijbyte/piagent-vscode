@@ -144,7 +144,54 @@ Open the command palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and search for:
 
 ## Configuration
 
-PiAgent uses the same configuration as the [pi CLI](https://pi.dev). Nothing is stored in VSCode settings. This means your setup works identically whether you use PiAgent in VSCode, the pi CLI in a terminal, or any other tool built on [pi-coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
+PiAgent shares most configuration with the [pi CLI](https://pi.dev) — API keys, models, and sessions are stored in `~/.pi/agent/`, not in VSCode settings. This means your setup works identically whether you use PiAgent in VSCode, the pi CLI in a terminal, or any other tool built on [pi-coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
+
+### VSCode Settings
+
+PiAgent has one VSCode-specific setting to control what appears in the status bar.
+
+#### `piagent.statusBar.show`
+
+Controls which token usage stats are shown in the status bar next to the model name. By default, everything is shown:
+
+```
+claude-opus-4-6 ↑141 / ↓26k / R7.8M / W99k / $5.159 (sub) / 49.7%/200k (auto)
+```
+
+Each item can be toggled independently:
+
+| Value | Status bar | Description |
+|-------|-----------|-------------|
+| `inputTokens` | `↑141` | Cumulative input tokens sent to the model |
+| `outputTokens` | `↓26k` | Cumulative output tokens received |
+| `cacheRead` | `R7.8M` | Tokens read from prompt cache |
+| `cacheWrite` | `W99k` | Tokens written to prompt cache |
+| `cost` | `$5.159 (sub)` | Session cost in USD. Shows `(sub)` for OAuth subscriptions |
+| `contextUsage` | `49.7%/200k (auto)` | Context window usage %. Shows `(auto)` when auto-compaction is on |
+
+**Default** — show everything:
+```json
+"piagent.statusBar.show": [
+  "inputTokens",
+  "outputTokens",
+  "cacheRead",
+  "cacheWrite",
+  "cost",
+  "contextUsage"
+]
+```
+
+**Show only cost and context usage:**
+```json
+"piagent.statusBar.show": ["cost", "contextUsage"]
+```
+
+**Show only the model name (hide all stats):**
+```json
+"piagent.statusBar.show": []
+```
+
+The tooltip (hover over the status bar) always shows the full breakdown regardless of this setting.
 
 ### API Keys
 
@@ -173,7 +220,7 @@ Add or override models via `~/.pi/agent/models.json`. Any provider that speaks t
 
 - **Chat Panel** — Streaming markdown responses and inline tool call summaries
 - **Output Channel** — Full untruncated tool output, useful for long bash output or large file reads. Access via `View → Output → PiAgent`
-- **Status Bar** — Shows the currently active model. Click to switch models.
+- **Status Bar** — Shows the active model, token usage, cost, and context window usage. Click to switch models. Hover for a detailed breakdown. Customize visible items via [`piagent.statusBar.show`](#piagentstatusbarshow).
 
 ## Requirements
 

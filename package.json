@@ -133,7 +133,44 @@
         "key": "ctrl+shift+m",
         "mac": "cmd+shift+m"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "PiAgent",
+      "properties": {
+        "piagent.statusBar.show": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "inputTokens",
+              "outputTokens",
+              "cacheRead",
+              "cacheWrite",
+              "cost",
+              "contextUsage"
+            ],
+            "enumDescriptions": [
+              "Input tokens sent to the model (↑)",
+              "Output tokens received from the model (↓)",
+              "Tokens read from prompt cache (R)",
+              "Tokens written to prompt cache (W)",
+              "Cumulative session cost in USD ($), shows (sub) for OAuth subscriptions",
+              "Context window usage as percentage with auto-compaction indicator"
+            ]
+          },
+          "default": [
+            "inputTokens",
+            "outputTokens",
+            "cacheRead",
+            "cacheWrite",
+            "cost",
+            "contextUsage"
+          ],
+          "markdownDescription": "Controls which token usage stats are shown in the status bar next to the model name. Remove items from the array to hide them.\n\nExample status bar: `$(robot) claude-opus-4-6 ↑141 / ↓26k / R7.8M / W99k / $5.159 (sub) / 49.7%/200k (auto)`\n\n| Value | Status bar | Description |\n|---|---|---|\n| `inputTokens` | `↑141` | Input tokens |\n| `outputTokens` | `↓26k` | Output tokens |\n| `cacheRead` | `R7.8M` | Cache read tokens |\n| `cacheWrite` | `W99k` | Cache write tokens |\n| `cost` | `$5.159 (sub)` | Session cost |\n| `contextUsage` | `49.7%/200k (auto)` | Context window usage |\n\nSet to an empty array `[]` to show only the model name.",
+          "scope": "window"
+        }
+      }
+    }
   },
   "scripts": {
     "clean": "rm -rf dist",
