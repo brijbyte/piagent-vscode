@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":automergeMinor",
+    ":automergeDigest",
+    "group:allNonMajor",
+    "schedule:weekly"
+  ],
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "Automerge non-major updates",
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Group all dev dependencies",
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "dev dependencies"
+    },
+    {
+      "description": "Group GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "automerge": true
+    },
+    {
+      "description": "Group pi-* packages together",
+      "matchPackagePatterns": ["^@mariozechner/pi-"],
+      "groupName": "pi packages"
+    },
+    {
+      "description": "VSCode engine - don't auto update",
+      "matchPackageNames": ["@types/vscode"],
+      "automerge": false,
+      "labels": ["dependencies", "vscode"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "prHourlyLimit": 3,
+  "prConcurrentLimit": 5
+}
