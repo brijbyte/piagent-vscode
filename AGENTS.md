@@ -122,3 +122,43 @@ Minimal logging to output channel:
 - Reference resolution failures (errors only)
 
 All user-facing feedback goes through `ChatResponseStream.markdown()` or `response.progress()`.
+
+## CI/CD
+
+### GitHub Actions Workflows
+
+#### `.github/workflows/ci.yml`
+Runs on every push and PR to `main`:
+- Type check (`pnpm run check`)
+- Build (`pnpm run build`)
+- Package (`pnpm run package`)
+- Upload `.vsix` as artifact
+
+#### `.github/workflows/publish.yml`
+Automatically publishes when local version is newer than marketplace:
+1. Fetches current version from VS Code Marketplace API
+2. Compares with local `package.json` version (semver comparison)
+3. If local is newer: builds, publishes, and creates GitHub Release
+4. If not newer: skips with summary message
+
+Triggers on:
+- Push to `main` branch
+- Manual trigger via `workflow_dispatch`
+
+### Setup Requirements
+
+1. **Create a Personal Access Token (PAT)** for VS Code Marketplace:
+   - Go to [Azure DevOps](https://dev.azure.com/)
+   - User Settings → Personal Access Tokens → New Token
+   - Set Organization to "All accessible organizations"
+   - Set Scopes: Marketplace → Manage
+
+2. **Add the token as a GitHub secret**:
+   - Go to repo Settings → Secrets and variables → Actions
+   - Add secret named `VSCE_PAT` with the token value
+
+### Publishing a New Version
+
+1. Update `version` in `package.json`
+2. Commit and push to `main`
+3. CI automatically publishes to marketplace and creates a GitHub release

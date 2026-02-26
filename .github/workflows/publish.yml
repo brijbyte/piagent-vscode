@@ -1,0 +1,151 @@
+name: Publish Extension
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.check.outputs.should_publish }}
+      local_version: ${{ steps.check.outputs.local_version }}
+      marketplace_version: ${{ steps.check.outputs.marketplace_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '24'
+
+      - name: Check version against marketplace
+        id: check
+        run: |
+          # Get local version from package.json
+          LOCAL_VERSION=$(node -p "require('./package.json').version")
+          echo "Local version: $LOCAL_VERSION"
+          echo "local_version=$LOCAL_VERSION" >> $GITHUB_OUTPUT
+          
+          # Get publisher and extension name
+          PUBLISHER=$(node -p "require('./package.json').publisher")
+          NAME=$(node -p "require('./package.json').name")
+          EXTENSION_ID="$PUBLISHER.$NAME"
+          echo "Extension ID: $EXTENSION_ID"
+          
+          # Fetch marketplace version using VS Code Marketplace API
+          MARKETPLACE_RESPONSE=$(curl -s -X POST \
+            'https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery' \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json;api-version=6.0-preview.1' \
+            -d "{
+              \"filters\": [{
+                \"criteria\": [{
+                  \"filterType\": 7,
+                  \"value\": \"$EXTENSION_ID\"
+                }]
+              }],
+              \"flags\": 512
+            }")
+          
+          # Extract version from response
+          MARKETPLACE_VERSION=$(echo "$MARKETPLACE_RESPONSE" | node -p "
+            try {
+              const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              const ext = data.results?.[0]?.extensions?.[0];
+              console.log(ext?.versions?.[0]?.version || '0.0.0');
+            } catch {
+              console.log('0.0.0');
+            }
+          " 2>/dev/null || echo "0.0.0")
+          
+          echo "Marketplace version: $MARKETPLACE_VERSION"
+          echo "marketplace_version=$MARKETPLACE_VERSION" >> $GITHUB_OUTPUT
+          
+          # Compare versions using node semver comparison
+          SHOULD_PUBLISH=$(node -p "
+            const local = '$LOCAL_VERSION'.split('.').map(Number);
+            const market = '$MARKETPLACE_VERSION'.split('.').map(Number);
+            for (let i = 0; i < 3; i++) {
+              if ((local[i] || 0) > (market[i] || 0)) {
+                console.log('true');
+                process.exit(0);
+              }
+              if ((local[i] || 0) < (market[i] || 0)) {
+                console.log('false');
+                process.exit(0);
+              }
+            }
+            console.log('false');
+          ")
+          
+          echo "Should publish: $SHOULD_PUBLISH"
+          echo "should_publish=$SHOULD_PUBLISH" >> $GITHUB_OUTPUT
+
+  publish:
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Package extension
+        run: npm run package
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          echo "Publishing v${{ needs.check-version.outputs.local_version }}"
+          echo "Previous marketplace version: ${{ needs.check-version.outputs.marketplace_version }}"
+          npx @vscode/vsce publish -p $VSCE_PAT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.2.1
+        with:
+          tag_name: v${{ needs.check-version.outputs.local_version }}
+          name: v${{ needs.check-version.outputs.local_version }}
+          body: |
+            ## Changes
+            
+            Published version **${{ needs.check-version.outputs.local_version }}** (previous: ${{ needs.check-version.outputs.marketplace_version }})
+            
+            See [full changelog](https://github.com/${{ github.repository }}/commits/main) for details.
+          files: '*.vsix'
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ needs.check-version.outputs.local_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous**: ${{ needs.check-version.outputs.marketplace_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Marketplace**: [View Extension](https://marketplace.visualstudio.com/items?itemName=brijbyte.piagent-vscode)" >> $GITHUB_STEP_SUMMARY
+
+  skip-publish:
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip summary
+        run: |
+          echo "## ⏭️ Publish Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Local version (**${{ needs.check-version.outputs.local_version }}**) is not newer than marketplace version (**${{ needs.check-version.outputs.marketplace_version }}**)." >> $GITHUB_STEP_SUMMARY

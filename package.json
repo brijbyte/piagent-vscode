@@ -430,7 +430,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "esbuild src/extension.mts --bundle --outfile=dist/extension.js --external:vscode --external:koffi --external:@mariozechner/clipboard --external:@mariozechner/pi-tui --external:cli-highlight --external:diff --external:extract-zip --external:marked --format=cjs --platform=node --inject:src/import-meta-polyfill.js --define:import.meta.url=importMetaUrl --minify",
-    "build:watch": "pnpm run build -- --watch",
+    "build:watch": "npm run build -- --watch",
     "package": "vsce package --no-dependencies",
     "check": "tsc --noEmit"
   },
