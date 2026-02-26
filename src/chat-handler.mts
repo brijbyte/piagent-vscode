@@ -71,6 +71,7 @@ export async function handleChatRequest(
 				activeResponse: undefined,
 				activeToolCalls: new Map(),
 				sessionUnsubscribe: undefined,
+				lastPrompt: undefined,
 			};
 			state.conversations.set(conversationId, conv);
 
@@ -149,6 +150,8 @@ export async function handleChatRequest(
 	});
 
 	try {
+		// Save the prompt for /retry support
+		conv.lastPrompt = fullPrompt;
 		await session.prompt(fullPrompt, promptOptions);
 		return { metadata: { conversationId, success: true } };
 	} catch (err) {

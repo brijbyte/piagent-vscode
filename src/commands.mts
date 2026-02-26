@@ -7,6 +7,9 @@
  *
  * Commands that need a session operate on the "active conversation" — the one
  * whose chat tab most recently received a request.
+ *
+ * Quick Actions are context menu commands that send selected code to the chat
+ * with a specific prompt.
  */
 
 import type { Api, Model, OAuthProviderId } from "@mariozechner/pi-ai";
@@ -76,6 +79,7 @@ export async function cmdNewSession(): Promise<void> {
 			activeResponse: undefined,
 			activeToolCalls: new Map(),
 			sessionUnsubscribe: undefined,
+			lastPrompt: undefined,
 		};
 		state.conversations.set(conversationId, conv);
 		state.activeConversationId = conversationId;
@@ -146,6 +150,7 @@ export async function cmdResumeSession(): Promise<void> {
 			activeResponse: undefined,
 			activeToolCalls: new Map(),
 			sessionUnsubscribe: undefined,
+			lastPrompt: undefined,
 		};
 		state.conversations.set(conversationId, conv);
 		state.activeConversationId = conversationId;
@@ -366,4 +371,114 @@ export async function cmdLogout(): Promise<void> {
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		vscode.window.showErrorMessage(`Failed to logout: ${errorMsg}`);
 	}
+}
+
+// ── Quick Actions (Context Menu) ─────────────────────────────────────────────
+
+/**
+ * Get the current text selection from the active editor.
+ * Returns the selected text and file info, or null if no selection.
+ */
+function getEditorSelection(): { text: string; fileName: string; languageId: string; startLine: number } | null {
+	const editor = vscode.window.activeTextEditor;
+	if (!editor) return null;
+
+	const selection = editor.selection;
+	if (selection.isEmpty) return null;
+
+	const text = editor.document.getText(selection);
+	if (!text.trim()) return null;
+
+	return {
+		text,
+		fileName: vscode.workspace.asRelativePath(editor.document.uri),
+		languageId: editor.document.languageId,
+		startLine: selection.start.line + 1,
+	};
+}
+
+/**
+ * Open chat with a specific prompt and the selected code.
+ */
+async function openChatWithSelection(prompt: string): Promise<void> {
+	const selection = getEditorSelection();
+	if (!selection) {
+		vscode.window.showWarningMessage("No text selected. Select some code first.");
+		return;
+	}
+
+	const codeBlock = `\`\`\`${selection.languageId}\n${selection.text}\n\`\`\``;
+	const context = `File: \`${selection.fileName}\` (line ${selection.startLine})\n\n${codeBlock}`;
+	const fullQuery = `@piagent ${prompt}\n\n${context}`;
+
+	await vscode.commands.executeCommand("workbench.action.chat.open", {
+		query: fullQuery,
+		isPartialQuery: false,
+	});
+}
+
+/** Quick action configuration */
+interface QuickActionConfig {
+	enabled: boolean;
+	prompt: string;
+}
+
+/** Default prompts for quick actions */
+const defaultPrompts: Record<string, string> = {
+	explainCode: "Explain this code clearly and concisely:",
+	refactorCode: "Refactor this code to improve readability, performance, or maintainability:",
+	writeTests: "Write comprehensive unit tests for this code:",
+	findBugs: "Analyze this code for potential bugs, edge cases, and issues:",
+	addDocs: "Add clear documentation and comments to this code:",
+	optimizeCode: "Optimize this code for better performance:",
+};
+
+/**
+ * Get quick action config from settings.
+ */
+export function getQuickActionConfig(action: string): QuickActionConfig {
+	const config = vscode.workspace.getConfiguration("piagent");
+	const quickActions = config.get<Record<string, QuickActionConfig>>("quickActions", {});
+	const actionConfig = quickActions[action];
+	
+	return {
+		enabled: actionConfig?.enabled ?? true,
+		prompt: actionConfig?.prompt || defaultPrompts[action] || "",
+	};
+}
+
+/** Explain the selected code */
+export async function cmdExplainCode(): Promise<void> {
+	const config = getQuickActionConfig("explainCode");
+	await openChatWithSelection(config.prompt);
+}
+
+/** Refactor the selected code */
+export async function cmdRefactorCode(): Promise<void> {
+	const config = getQuickActionConfig("refactorCode");
+	await openChatWithSelection(config.prompt);
+}
+
+/** Write tests for the selected code */
+export async function cmdWriteTests(): Promise<void> {
+	const config = getQuickActionConfig("writeTests");
+	await openChatWithSelection(config.prompt);
+}
+
+/** Find bugs in the selected code */
+export async function cmdFindBugs(): Promise<void> {
+	const config = getQuickActionConfig("findBugs");
+	await openChatWithSelection(config.prompt);
+}
+
+/** Add documentation/comments to the selected code */
+export async function cmdAddDocs(): Promise<void> {
+	const config = getQuickActionConfig("addDocs");
+	await openChatWithSelection(config.prompt);
+}
+
+/** Optimize the selected code */
+export async function cmdOptimizeCode(): Promise<void> {
+	const config = getQuickActionConfig("optimizeCode");
+	await openChatWithSelection(config.prompt);
 }

@@ -99,9 +99,9 @@ function renderSessionHistory(
 				typeof userMsg.content === "string"
 					? userMsg.content
 					: userMsg.content
-							.filter((c): c is TextContent => c.type === "text")
-							.map((c) => c.text)
-							.join("");
+						.filter((c): c is TextContent => c.type === "text")
+						.map((c) => c.text)
+						.join("");
 
 			if (!text.trim()) continue;
 
@@ -160,6 +160,12 @@ export async function handleSlashCommand(
 			return slashLogin(response, conversationId);
 		case "logout":
 			return slashLogout(response, conversationId);
+		case "clear":
+			return slashClear(response, conversationId);
+		case "copy":
+			return slashCopy(response, conversationId);
+		case "retry":
+			return slashRetry(response, conversationId);
 		case "help":
 			return slashHelp(response, conversationId);
 		case "settings":
@@ -209,6 +215,7 @@ async function slashNew(
 			activeResponse: undefined,
 			activeToolCalls: new Map(),
 			sessionUnsubscribe: undefined,
+			lastPrompt: undefined,
 		};
 		state.conversations.set(conversationId, conv);
 		state.activeConversationId = conversationId;
@@ -287,6 +294,7 @@ async function slashResume(
 			activeResponse: undefined,
 			activeToolCalls: new Map(),
 			sessionUnsubscribe: undefined,
+			lastPrompt: undefined,
 		};
 		state.conversations.set(conversationId, conv);
 		state.activeConversationId = conversationId;
@@ -576,6 +584,123 @@ async function slashLogout(
 	}
 }
 
+// ── /clear ───────────────────────────────────────────────────────────────────
+
+async function slashClear(
+	response: vscode.ChatResponseStream,
+	conversationId: string,
+): Promise<vscode.ChatResult> {
+	const conv = requireConversation(conversationId, response);
+	if (!conv) return { metadata: { conversationId, error: true } };
+
+	try {
+		// Clear the session messages but keep the session alive
+		conv.session.sessionManager.newSession();
+		conv.lastPrompt = undefined;
+
+		response.markdown("> **Chat cleared** · Session preserved, ready for new conversation");
+		return { metadata: { conversationId, success: true } };
+	} catch (err) {
+		const errorMsg = err instanceof Error ? err.message : String(err);
+		response.markdown(`**Error:** ${errorMsg}`);
+		return { metadata: { conversationId, error: true } };
+	}
+}
+
+// ── /copy ────────────────────────────────────────────────────────────────────
+
+async function slashCopy(
+	response: vscode.ChatResponseStream,
+	conversationId: string,
+): Promise<vscode.ChatResult> {
+	const conv = requireConversation(conversationId, response);
+	if (!conv) return { metadata: { conversationId, error: true } };
+
+	try {
+		const entries = conv.session.sessionManager.getEntries();
+		const messageEntries = entries.filter(
+			(e): e is SessionMessageEntry => e.type === "message",
+		);
+
+		// Find the last assistant message
+		let lastAssistantText = "";
+		for (let i = messageEntries.length - 1; i >= 0; i--) {
+			const msg = messageEntries[i].message;
+			if (msg.role === "assistant") {
+				const assistantMsg = msg as AssistantMessage;
+				lastAssistantText = assistantMsg.content
+					.filter((c): c is TextContent => c.type === "text")
+					.map((c) => c.text)
+					.join("");
+				break;
+			}
+		}
+
+		if (!lastAssistantText.trim()) {
+			response.markdown("No assistant response to copy.");
+			return { metadata: { conversationId, error: true } };
+		}
+
+		await vscode.env.clipboard.writeText(lastAssistantText);
+		const preview = lastAssistantText.length > 50
+			? lastAssistantText.slice(0, 50) + "…"
+			: lastAssistantText;
+		response.markdown(`> **Copied to clipboard** · "${preview}"`);
+		return { metadata: { conversationId, success: true } };
+	} catch (err) {
+		const errorMsg = err instanceof Error ? err.message : String(err);
+		response.markdown(`**Error:** ${errorMsg}`);
+		return { metadata: { conversationId, error: true } };
+	}
+}
+
+// ── /retry ───────────────────────────────────────────────────────────────────
+
+async function slashRetry(
+	response: vscode.ChatResponseStream,
+	conversationId: string,
+): Promise<vscode.ChatResult> {
+	const conv = requireConversation(conversationId, response);
+	if (!conv) return { metadata: { conversationId, error: true } };
+
+	if (!conv.lastPrompt) {
+		response.markdown("No previous prompt to retry. Send a message first.");
+		return { metadata: { conversationId, error: true } };
+	}
+
+	const promptPreview = conv.lastPrompt.slice(0, 100) + (conv.lastPrompt.length > 100 ? "…" : "");
+	response.markdown(`> **Retrying:** ${promptPreview}\n\n`);
+
+	const session = conv.session;
+
+	// Set up event handling for this response
+	conv.activeResponse = response;
+	conv.activeToolCalls = new Map();
+
+	// Import dynamically to avoid circular dependency
+	const { handleSessionEvent } = await import("./event-handler.mjs");
+
+	// Ensure a single subscription per conversation
+	if (conv.sessionUnsubscribe) {
+		conv.sessionUnsubscribe();
+	}
+	conv.sessionUnsubscribe = session.subscribe((event) => {
+		if (!conv.activeResponse) return;
+		handleSessionEvent(event, conv.activeResponse, conv.activeToolCalls);
+	});
+
+	try {
+		await session.prompt(conv.lastPrompt);
+		return { metadata: { conversationId, success: true } };
+	} catch (err) {
+		const errorMsg = err instanceof Error ? err.message : String(err);
+		response.markdown(`\n\n**Error:** ${errorMsg}`);
+		return { metadata: { conversationId, error: true } };
+	} finally {
+		conv.activeResponse = undefined;
+	}
+}
+
 // ── /help ────────────────────────────────────────────────────────────────────
 
 async function slashHelp(
@@ -591,6 +716,9 @@ async function slashHelp(
 | \`/model\` | Select a different model |
 | \`/compact\` | Compact the session context |
 | \`/session\` | Show session info and stats |
+| \`/clear\` | Clear chat history but keep session |
+| \`/copy\` | Copy last response to clipboard |
+| \`/retry\` | Retry the last prompt |
 | \`/login\` | Login with an OAuth provider (Anthropic, OpenAI, GitHub Copilot, Google) |
 | \`/logout\` | Logout from an OAuth provider |
 | \`/settings\` | Open extension settings |
@@ -599,6 +727,17 @@ async function slashHelp(
 ### Keyboard Shortcuts
 
 - **Cmd+Shift+M** (Mac) / **Ctrl+Shift+M** (Windows/Linux): Select model
+
+### Quick Actions (💡 Lightbulb or Right-click)
+
+Select code in the editor and use the lightbulb menu (Cmd+.) or right-click:
+
+- **Explain Code** - Get a clear explanation
+- **Find Bugs** - Analyze for potential issues
+- **Refactor Code** - Improve readability/maintainability
+- **Optimize Code** - Improve performance
+- **Add Documentation** - Add comments and docs
+- **Write Tests** - Generate unit tests
 
 ### Command Palette
 

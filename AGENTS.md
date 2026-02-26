@@ -85,6 +85,12 @@ Settings are read from VSCode config and applied to all sessions immediately on 
 3. Add command definition in `package.json` under `chatParticipants[0].commands`
 4. Update `/help` command output in `slashHelp()`
 
+### Adding a Quick Action (context menu)
+1. Add handler function in `commands.mts` (use `openChatWithSelection()` helper)
+2. Export and register in `extension.mts`
+3. Add command definition in `package.json` under `contributes.commands`
+4. Add to `piagent.submenu` in `package.json` menus
+
 ### Adding a new setting
 1. Add to `package.json` under `contributes.configuration.properties`
 2. Add to `PiAgentSettings` interface in `settings.mts`

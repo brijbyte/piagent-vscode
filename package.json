@@ -2,7 +2,7 @@
   "name": "piagent-vscode",
   "displayName": "PiAgent - AI Coding Agent",
   "description": "AI coding agent for VSCode Chat. Read, write, edit files and run bash commands using Claude, GPT-4, Gemini, and 10+ LLM providers. No permission prompts - tools execute directly. Uses the same shared configuration as the pi CLI.",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publisher": "brijbyte",
   "author": {
     "name": "BrijByte",
@@ -99,6 +99,18 @@
             "description": "Logout from an OAuth provider"
           },
           {
+            "name": "clear",
+            "description": "Clear chat history but keep session"
+          },
+          {
+            "name": "copy",
+            "description": "Copy last response to clipboard"
+          },
+          {
+            "name": "retry",
+            "description": "Retry the last prompt"
+          },
+          {
             "name": "help",
             "description": "Show available commands"
           },
@@ -129,8 +141,73 @@
       {
         "command": "piagent.logout",
         "title": "PiAgent: Logout"
+      },
+      {
+        "command": "piagent.explainCode",
+        "title": "PiAgent: Explain Code"
+      },
+      {
+        "command": "piagent.refactorCode",
+        "title": "PiAgent: Refactor Code"
+      },
+      {
+        "command": "piagent.writeTests",
+        "title": "PiAgent: Write Tests"
+      },
+      {
+        "command": "piagent.findBugs",
+        "title": "PiAgent: Find Bugs"
+      },
+      {
+        "command": "piagent.addDocs",
+        "title": "PiAgent: Add Documentation"
+      },
+      {
+        "command": "piagent.optimizeCode",
+        "title": "PiAgent: Optimize Code"
       }
     ],
+    "submenus": [
+      {
+        "id": "piagent.submenu",
+        "label": "PiAgent"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "submenu": "piagent.submenu",
+          "group": "piagent",
+          "when": "editorHasSelection"
+        }
+      ],
+      "piagent.submenu": [
+        {
+          "command": "piagent.explainCode",
+          "group": "1_understand"
+        },
+        {
+          "command": "piagent.findBugs",
+          "group": "1_understand"
+        },
+        {
+          "command": "piagent.refactorCode",
+          "group": "2_improve"
+        },
+        {
+          "command": "piagent.optimizeCode",
+          "group": "2_improve"
+        },
+        {
+          "command": "piagent.addDocs",
+          "group": "3_document"
+        },
+        {
+          "command": "piagent.writeTests",
+          "group": "3_document"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "piagent.selectModel",
@@ -193,7 +270,13 @@
         },
         "piagent.thinkingLevel": {
           "type": "string",
-          "enum": ["off", "minimal", "low", "medium", "high"],
+          "enum": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
           "default": "medium",
           "enumDescriptions": [
             "Disable extended thinking (fastest, cheapest)",
@@ -204,13 +287,149 @@
           ],
           "markdownDescription": "Default thinking level for reasoning models (Claude with extended thinking, o1, etc.). Higher levels allow more thorough reasoning but use more tokens.",
           "scope": "window"
+        },
+        "piagent.quickActions": {
+          "type": "object",
+          "markdownDescription": "Configure quick actions available in the lightbulb menu and context menu when code is selected.",
+          "additionalProperties": false,
+          "properties": {
+            "explainCode": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "prompt": {
+                  "type": "string",
+                  "default": "Explain this code clearly and concisely:"
+                }
+              },
+              "default": {
+                "enabled": true,
+                "prompt": "Explain this code clearly and concisely:"
+              }
+            },
+            "findBugs": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "prompt": {
+                  "type": "string",
+                  "default": "Analyze this code for potential bugs, edge cases, and issues:"
+                }
+              },
+              "default": {
+                "enabled": true,
+                "prompt": "Analyze this code for potential bugs, edge cases, and issues:"
+              }
+            },
+            "refactorCode": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "prompt": {
+                  "type": "string",
+                  "default": "Refactor this code to improve readability, performance, or maintainability:"
+                }
+              },
+              "default": {
+                "enabled": true,
+                "prompt": "Refactor this code to improve readability, performance, or maintainability:"
+              }
+            },
+            "optimizeCode": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "prompt": {
+                  "type": "string",
+                  "default": "Optimize this code for better performance:"
+                }
+              },
+              "default": {
+                "enabled": true,
+                "prompt": "Optimize this code for better performance:"
+              }
+            },
+            "addDocs": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "prompt": {
+                  "type": "string",
+                  "default": "Add clear documentation and comments to this code:"
+                }
+              },
+              "default": {
+                "enabled": true,
+                "prompt": "Add clear documentation and comments to this code:"
+              }
+            },
+            "writeTests": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "prompt": {
+                  "type": "string",
+                  "default": "Write comprehensive unit tests for this code:"
+                }
+              },
+              "default": {
+                "enabled": true,
+                "prompt": "Write comprehensive unit tests for this code:"
+              }
+            }
+          },
+          "default": {
+            "explainCode": {
+              "enabled": true,
+              "prompt": "Explain this code clearly and concisely:"
+            },
+            "findBugs": {
+              "enabled": true,
+              "prompt": "Analyze this code for potential bugs, edge cases, and issues:"
+            },
+            "refactorCode": {
+              "enabled": true,
+              "prompt": "Refactor this code to improve readability, performance, or maintainability:"
+            },
+            "optimizeCode": {
+              "enabled": true,
+              "prompt": "Optimize this code for better performance:"
+            },
+            "addDocs": {
+              "enabled": true,
+              "prompt": "Add clear documentation and comments to this code:"
+            },
+            "writeTests": {
+              "enabled": true,
+              "prompt": "Write comprehensive unit tests for this code:"
+            }
+          },
+          "scope": "window"
         }
       }
     }
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "esbuild src/extension.mts --bundle --outfile=dist/extension.js --external:vscode --external:koffi --external:@mariozechner/clipboard --format=cjs --platform=node --inject:src/import-meta-polyfill.js --define:import.meta.url=importMetaUrl --minify",
+    "build": "esbuild src/extension.mts --bundle --outfile=dist/extension.js --external:vscode --external:koffi --external:@mariozechner/clipboard --external:@mariozechner/pi-tui --external:cli-highlight --external:diff --external:extract-zip --external:marked --format=cjs --platform=node --inject:src/import-meta-polyfill.js --define:import.meta.url=importMetaUrl --minify",
     "build:watch": "pnpm run build -- --watch",
     "package": "vsce package --no-dependencies",
     "check": "tsc --noEmit"
@@ -221,7 +440,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.21",
-    "@types/vscode": "^1.109.0",
+    "@types/vscode": "^1.100.0",
     "@vscode/vsce": "^3.7.1",
     "esbuild": "^0.27.3",
     "typescript": "^5.9.3"

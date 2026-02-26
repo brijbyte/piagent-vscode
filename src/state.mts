@@ -23,6 +23,8 @@ export interface ChatConversation {
 	activeResponse: vscode.ChatResponseStream | undefined;
 	activeToolCalls: Map<string, { name: string; args: string }>;
 	sessionUnsubscribe: (() => void) | undefined;
+	/** Last user prompt for /retry support */
+	lastPrompt: string | undefined;
 }
 
 // ── Global extension state ───────────────────────────────────────────────────
