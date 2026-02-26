@@ -7,7 +7,7 @@
 
 import type { ContextUsage } from "@mariozechner/pi-coding-agent";
 import * as vscode from "vscode";
-import { state } from "./state.mjs";
+import { getActiveConversation, state } from "./state.mjs";
 
 let statusBarItem: vscode.StatusBarItem | undefined;
 
@@ -59,21 +59,23 @@ export function ensureStatusBar(): vscode.StatusBarItem {
 }
 
 export function updateStatusBar(): void {
-	if (!statusBarItem && !state.currentSession) {
+	const conv = getActiveConversation();
+
+	if (!statusBarItem && !conv) {
 		// Don't create the status bar until PiAgent has been used
 		return;
 	}
 
 	const bar = ensureStatusBar();
 
-	if (!state.currentSession?.model) {
+	if (!conv?.session?.model) {
 		bar.text = "$(robot) PiAgent: No model";
 		bar.tooltip = "Click to change PiAgent model";
 		bar.show();
 		return;
 	}
 
-	const session = state.currentSession;
+	const session = conv.session;
 	const model = session.model!;
 	const itemOrder = getStatusBarItemOrder();
 

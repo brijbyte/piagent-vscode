@@ -11,7 +11,6 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@mariozechner/pi-coding-agent";
-import { state } from "./state.mjs";
 
 export interface InitSessionResult {
 	session: AgentSession;
@@ -58,7 +57,7 @@ export async function initSession(cwd: string): Promise<InitSessionResult> {
 	const sessionManager = SessionManager.create(cwd);
 	const resourceLoader = await createResourceLoader(cwd, settingsManager);
 
-	const { session, modelFallbackMessage } = await createAgentSession({
+	const { session } = await createAgentSession({
 		cwd,
 		authStorage,
 		modelRegistry,
@@ -67,13 +66,7 @@ export async function initSession(cwd: string): Promise<InitSessionResult> {
 		resourceLoader,
 	});
 
-	if (modelFallbackMessage) {
-		state.outputChannel.appendLine(`Model fallback: ${modelFallbackMessage}`);
-	}
-
 	const model = session.model ? `${session.model.provider}/${session.model.id}` : "no model";
-	state.outputChannel.appendLine(`Session initialized in ${cwd}`);
-	state.outputChannel.appendLine(`Model: ${model}`);
 
 	return { session, model };
 }

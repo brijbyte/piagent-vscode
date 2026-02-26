@@ -4,6 +4,9 @@
  * These run outside of a chat request so they can't write to a
  * ChatResponseStream.  Instead they stash a status string in
  * `state.pendingSessionStatus` which the next chat request picks up.
+ *
+ * Commands that need a session operate on the "active conversation" — the one
+ * whose chat tab most recently received a request.
  */
 
 import type { Api, Model, OAuthProviderId } from "@mariozechner/pi-ai";
@@ -20,7 +23,13 @@ import {
 import { join } from "path";
 import * as vscode from "vscode";
 import { updateStatusBar } from "./status-bar.mjs";
-import { cleanupSessionSubscription, state } from "./state.mjs";
+import {
+	type ChatConversation,
+	cleanupConversationSubscription,
+	getActiveConversation,
+	newConversationId,
+	state,
+} from "./state.mjs";
 import { createResourceLoader } from "./session.mjs";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -51,16 +60,28 @@ export async function cmdNewSession(): Promise<void> {
 			resourceLoader,
 		});
 
-		cleanupSessionSubscription();
-		state.currentSession = session;
+		// Create a new conversation for the active chat tab (or a new ID if none)
+		const conversationId = state.activeConversationId ?? newConversationId();
+		const existing = state.conversations.get(conversationId);
+		if (existing) cleanupConversationSubscription(existing);
+
+		const conv: ChatConversation = {
+			id: conversationId,
+			session,
+			workspaceFolder,
+			activeResponse: undefined,
+			activeToolCalls: new Map(),
+			sessionUnsubscribe: undefined,
+		};
+		state.conversations.set(conversationId, conv);
+		state.activeConversationId = conversationId;
+
 		updateStatusBar();
 		const model = session.model ? `${session.model.provider}/${session.model.id}` : "no model";
 		state.pendingSessionStatus = `**New session started** · ${model}`;
-		state.outputChannel.appendLine("New session started");
 	} catch (err) {
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		vscode.window.showErrorMessage(`Failed to create session: ${errorMsg}`);
-		state.outputChannel.appendLine(`Failed to create session: ${errorMsg}`);
 	}
 }
 
@@ -107,8 +128,21 @@ export async function cmdResumeSession(): Promise<void> {
 			resourceLoader,
 		});
 
-		cleanupSessionSubscription();
-		state.currentSession = session;
+		const conversationId = state.activeConversationId ?? newConversationId();
+		const existing = state.conversations.get(conversationId);
+		if (existing) cleanupConversationSubscription(existing);
+
+		const conv: ChatConversation = {
+			id: conversationId,
+			session,
+			workspaceFolder,
+			activeResponse: undefined,
+			activeToolCalls: new Map(),
+			sessionUnsubscribe: undefined,
+		};
+		state.conversations.set(conversationId, conv);
+		state.activeConversationId = conversationId;
+
 		updateStatusBar();
 		const model = session.model ? `${session.model.provider}/${session.model.id}` : "no model";
 		const messageCount = sessions.find((s) => s.path === selected.sessionPath)?.messageCount ?? 0;
@@ -119,24 +153,23 @@ export async function cmdResumeSession(): Promise<void> {
 		}
 
 		state.pendingSessionStatus = status;
-		state.outputChannel.appendLine(`Resumed session: ${selected.sessionPath}`);
 	} catch (err) {
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		vscode.window.showErrorMessage(`Failed to resume session: ${errorMsg}`);
-		state.outputChannel.appendLine(`Failed to resume session: ${errorMsg}`);
 	}
 }
 
 // ── Select Model ─────────────────────────────────────────────────────────────
 
 export async function cmdSelectModel(): Promise<void> {
-	if (!state.currentSession) {
+	const conv = getActiveConversation();
+	if (!conv) {
 		vscode.window.showWarningMessage("No active session. Send a message first or resume a session.");
 		return;
 	}
 
 	try {
-		const models: Model<Api>[] = state.currentSession.modelRegistry.getAvailable();
+		const models: Model<Api>[] = conv.session.modelRegistry.getAvailable();
 
 		if (models.length === 0) {
 			vscode.window.showWarningMessage("No models available. Check your API keys.");
@@ -155,9 +188,7 @@ export async function cmdSelectModel(): Promise<void> {
 
 		// Build items with separators
 		const items: ModelQuickPickItem[] = [];
-		const currentModelId = state.currentSession.model?.id;
-
-		// Sort providers alphabetically
+		const currentModelId = conv.session.model?.id;
 		const sortedProviders = Array.from(modelsByProvider.keys()).sort();
 
 		for (const provider of sortedProviders) {
@@ -184,14 +215,12 @@ export async function cmdSelectModel(): Promise<void> {
 
 		if (!selected || !selected.model) return;
 
-		await state.currentSession.setModel(selected.model);
+		await conv.session.setModel(selected.model);
 		updateStatusBar();
 		state.pendingSessionStatus = `**Model changed** · ${selected.model.provider}/${selected.model.id}`;
-		state.outputChannel.appendLine(`Model changed to ${selected.model.provider}/${selected.model.id}`);
 	} catch (err) {
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		vscode.window.showErrorMessage(`Failed to select model: ${errorMsg}`);
-		state.outputChannel.appendLine(`Failed to select model: ${errorMsg}`);
 	}
 }
 
@@ -239,7 +268,6 @@ export async function cmdLogin(): Promise<void> {
 				await authStorage.login(providerId as OAuthProviderId, {
 					onAuth: (info) => {
 						vscode.env.openExternal(vscode.Uri.parse(info.url));
-						state.outputChannel.appendLine(`OAuth: opened browser for ${info.url}`);
 					},
 
 					onPrompt: async (prompt) => {
@@ -248,17 +276,13 @@ export async function cmdLogin(): Promise<void> {
 							placeHolder: prompt.placeholder,
 							ignoreFocusOut: true,
 						});
-						if (value === undefined) {
-							throw new Error("Login cancelled");
-						}
-						if (!value && !prompt.allowEmpty) {
-							throw new Error("Login cancelled");
-						}
+						if (value === undefined) throw new Error("Login cancelled");
+						if (!value && !prompt.allowEmpty) throw new Error("Login cancelled");
 						return value ?? "";
 					},
 
-					onProgress: (message) => {
-						state.outputChannel.appendLine(`OAuth progress: ${message}`);
+					onProgress: (_message) => {
+						// Progress shown in notification
 					},
 
 					onManualCodeInput: async () => {
@@ -267,9 +291,7 @@ export async function cmdLogin(): Promise<void> {
 							placeHolder: "https://...",
 							ignoreFocusOut: true,
 						});
-						if (value === undefined) {
-							throw new Error("Login cancelled");
-						}
+						if (value === undefined) throw new Error("Login cancelled");
 						return value;
 					},
 
@@ -278,21 +300,19 @@ export async function cmdLogin(): Promise<void> {
 			},
 		);
 
-		// Refresh model registry if session exists
-		if (state.currentSession) {
-			state.currentSession.modelRegistry.refresh();
-			updateStatusBar();
+		// Refresh model registries across all conversations
+		for (const conv of state.conversations.values()) {
+			conv.session.modelRegistry.refresh();
 		}
+		updateStatusBar();
 
 		const authPath = join(getAgentDir(), "auth.json");
 		state.pendingSessionStatus = `**Logged in to ${providerName}** · Credentials saved to \`${authPath}\``;
 		vscode.window.showInformationMessage(`Logged in to ${providerName}`);
-		state.outputChannel.appendLine(`Successfully logged in to ${providerName}`);
 	} catch (err) {
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		if (errorMsg !== "Login cancelled") {
 			vscode.window.showErrorMessage(`Failed to login to ${providerName}: ${errorMsg}`);
-			state.outputChannel.appendLine(`Login failed for ${providerName}: ${errorMsg}`);
 		}
 	}
 }
@@ -327,17 +347,16 @@ export async function cmdLogout(): Promise<void> {
 	try {
 		authStorage.logout(selected.providerId);
 
-		if (state.currentSession) {
-			state.currentSession.modelRegistry.refresh();
-			updateStatusBar();
+		// Refresh model registries across all conversations
+		for (const conv of state.conversations.values()) {
+			conv.session.modelRegistry.refresh();
 		}
+		updateStatusBar();
 
 		state.pendingSessionStatus = `**Logged out of ${selected.label}**`;
 		vscode.window.showInformationMessage(`Logged out of ${selected.label}`);
-		state.outputChannel.appendLine(`Logged out of ${selected.label}`);
 	} catch (err) {
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		vscode.window.showErrorMessage(`Failed to logout: ${errorMsg}`);
-		state.outputChannel.appendLine(`Logout failed: ${errorMsg}`);
 	}
 }

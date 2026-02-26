@@ -7,7 +7,6 @@
 
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import * as vscode from "vscode";
-import { state } from "./state.mjs";
 import { updateStatusBar } from "./status-bar.mjs";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -19,6 +18,113 @@ function formatBytes(bytes: number): string {
 	if (bytes < 1024) return `${bytes} bytes`;
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Map file extensions to markdown fence language identifiers. */
+const EXT_TO_LANG: Record<string, string> = {
+	".ts": "typescript",
+	".tsx": "tsx",
+	".mts": "typescript",
+	".cts": "typescript",
+	".js": "javascript",
+	".jsx": "jsx",
+	".mjs": "javascript",
+	".cjs": "javascript",
+	".json": "json",
+	".jsonc": "jsonc",
+	".py": "python",
+	".rs": "rust",
+	".go": "go",
+	".rb": "ruby",
+	".java": "java",
+	".kt": "kotlin",
+	".kts": "kotlin",
+	".swift": "swift",
+	".c": "c",
+	".h": "c",
+	".cpp": "cpp",
+	".hpp": "cpp",
+	".cc": "cpp",
+	".cs": "csharp",
+	".html": "html",
+	".htm": "html",
+	".css": "css",
+	".scss": "scss",
+	".less": "less",
+	".vue": "vue",
+	".svelte": "svelte",
+	".php": "php",
+	".sh": "bash",
+	".bash": "bash",
+	".zsh": "zsh",
+	".fish": "fish",
+	".ps1": "powershell",
+	".sql": "sql",
+	".md": "markdown",
+	".mdx": "mdx",
+	".yaml": "yaml",
+	".yml": "yaml",
+	".toml": "toml",
+	".xml": "xml",
+	".graphql": "graphql",
+	".gql": "graphql",
+	".r": "r",
+	".lua": "lua",
+	".dart": "dart",
+	".ex": "elixir",
+	".exs": "elixir",
+	".erl": "erlang",
+	".zig": "zig",
+	".tf": "hcl",
+	".dockerfile": "dockerfile",
+	".proto": "protobuf",
+};
+
+/**
+ * Infer a fence language for tool results based on tool name and args.
+ * Returns "" when no language can be determined (plain text fence).
+ */
+function inferResultLanguage(toolName: string, argsJson: string | undefined): string {
+	if (!argsJson) return "";
+
+	try {
+		const args = JSON.parse(argsJson);
+
+		switch (toolName) {
+			case "read":
+			case "write":
+			case "edit": {
+				const filePath = args.path as string | undefined;
+				if (!filePath) return "";
+				return langFromPath(filePath);
+			}
+			case "bash":
+				return "bash";
+			case "grep":
+			case "find":
+			case "ls":
+				return "";
+			default:
+				return "";
+		}
+	} catch {
+		return "";
+	}
+}
+
+function langFromPath(filePath: string): string {
+	// Check exact filename first (e.g. "Dockerfile", "Makefile")
+	const basename = filePath.split("/").pop() ?? "";
+	const lowerBase = basename.toLowerCase();
+	if (lowerBase === "dockerfile" || lowerBase.startsWith("dockerfile."))
+		return "dockerfile";
+	if (lowerBase === "makefile" || lowerBase === "gnumakefile") return "makefile";
+
+	// Extension lookup
+	const dot = basename.lastIndexOf(".");
+	if (dot === -1) return "";
+	const ext = basename.slice(dot).toLowerCase();
+	return EXT_TO_LANG[ext] ?? "";
 }
 
 /**
@@ -121,39 +227,28 @@ export function handleSessionEvent(
 			if (toolName === "write" || toolName === "edit" || toolName === "read") {
 				response.progress(`Running ${toolName}...`);
 			}
-
-			state.outputChannel.appendLine(`[Tool Start] ${toolName}: ${JSON.stringify(args)}`);
 			break;
 		}
 
 		case "tool_execution_update": {
-			const { partialResult } = event;
-			if (partialResult?.content) {
-				for (const block of partialResult.content) {
-					if (block.type === "text") {
-						state.outputChannel.append(block.text);
-					}
-				}
-			}
+			// Partial results streamed to output channel for debugging if needed
 			break;
 		}
 
 		case "tool_execution_end": {
 			const { toolCallId, toolName, result, isError } = event;
+			const entry = toolCallsInProgress.get(toolCallId);
 			toolCallsInProgress.delete(toolCallId);
 
 			const resultText = extractToolResultText(result);
 			const truncated = resultText.length > 500 ? `${resultText.slice(0, 500)}...` : resultText;
+			const lang = inferResultLanguage(toolName, entry?.args);
 
 			if (isError) {
 				response.markdown(`\n\`\`\`\nError: ${truncated}\n\`\`\`\n`);
 			} else {
-				response.markdown(`\n\`\`\`\n${truncated}\n\`\`\`\n`);
+				response.markdown(`\n\`\`\`${lang}\n${truncated}\n\`\`\`\n`);
 			}
-
-			state.outputChannel.appendLine(`[Tool End] ${toolName}: ${isError ? "ERROR" : "OK"}`);
-			state.outputChannel.appendLine(resultText);
-			state.outputChannel.appendLine("");
 			break;
 		}
 

@@ -9,24 +9,38 @@
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import * as vscode from "vscode";
 
+// ── Per-conversation state ───────────────────────────────────────────────────
+
+/**
+ * Each VSCode chat tab gets its own ChatConversation, keyed by a generated
+ * conversation ID that's stashed in ChatResult.metadata and recovered from
+ * ChatContext.history on subsequent requests.
+ */
+export interface ChatConversation {
+	id: string;
+	session: AgentSession;
+	workspaceFolder: string;
+	activeResponse: vscode.ChatResponseStream | undefined;
+	activeToolCalls: Map<string, { name: string; args: string }>;
+	sessionUnsubscribe: (() => void) | undefined;
+}
+
+// ── Global extension state ───────────────────────────────────────────────────
+
 export interface ExtensionState {
 	// ── Core extension plumbing ──────────────────────────────────────────
 	outputChannel: vscode.OutputChannel;
 	extensionContext: vscode.ExtensionContext;
 
-	// ── Session ──────────────────────────────────────────────────────────
-	currentSession: AgentSession | undefined;
-	currentWorkspaceFolder: string | undefined;
+	// ── Conversations ────────────────────────────────────────────────────
+	/** All active chat conversations, keyed by conversation ID. */
+	conversations: Map<string, ChatConversation>;
 
-	// ── Active response stream ───────────────────────────────────────────
-	//
-	// Events from the agent session are routed to whichever ChatResponseStream
-	// is currently active.  When the user sends a new message while the agent
-	// is streaming, the stream is swapped so output flows into the latest chat
-	// bubble.
-	activeResponse: vscode.ChatResponseStream | undefined;
-	activeToolCalls: Map<string, { name: string; args: string }>;
-	sessionUnsubscribe: (() => void) | undefined;
+	/**
+	 * The conversation that most recently handled a request.
+	 * Used by status bar and command-palette commands that need "the current session".
+	 */
+	activeConversationId: string | undefined;
 
 	// ── Pending status ───────────────────────────────────────────────────
 	//
@@ -45,20 +59,78 @@ export interface ExtensionState {
 export const state: ExtensionState = {
 	outputChannel: undefined as unknown as vscode.OutputChannel,
 	extensionContext: undefined as unknown as vscode.ExtensionContext,
-	currentSession: undefined,
-	currentWorkspaceFolder: undefined,
-	activeResponse: undefined,
-	activeToolCalls: new Map(),
-	sessionUnsubscribe: undefined,
+	conversations: new Map(),
+	activeConversationId: undefined,
 	pendingSessionStatus: undefined,
 };
 
-/** Clean up the global event subscription when switching / replacing sessions. */
-export function cleanupSessionSubscription(): void {
-	if (state.sessionUnsubscribe) {
-		state.sessionUnsubscribe();
-		state.sessionUnsubscribe = undefined;
+// ── Convenience accessors ────────────────────────────────────────────────────
+
+/** Get the currently active conversation (the one last used). */
+export function getActiveConversation(): ChatConversation | undefined {
+	if (!state.activeConversationId) return undefined;
+	return state.conversations.get(state.activeConversationId);
+}
+
+/** Shorthand: get the AgentSession from the active conversation. */
+export function getActiveSession(): AgentSession | undefined {
+	return getActiveConversation()?.session;
+}
+
+// ── Lifecycle ────────────────────────────────────────────────────────────────
+
+/**
+ * Clean up the event subscription for a specific conversation.
+ */
+export function cleanupConversationSubscription(conv: ChatConversation): void {
+	if (conv.sessionUnsubscribe) {
+		conv.sessionUnsubscribe();
+		conv.sessionUnsubscribe = undefined;
 	}
-	state.activeResponse = undefined;
-	state.activeToolCalls = new Map();
+	conv.activeResponse = undefined;
+	conv.activeToolCalls = new Map();
+}
+
+/**
+ * Remove a conversation entirely.
+ */
+export function removeConversation(id: string): void {
+	const conv = state.conversations.get(id);
+	if (conv) {
+		cleanupConversationSubscription(conv);
+		state.conversations.delete(id);
+		if (state.activeConversationId === id) {
+			state.activeConversationId = undefined;
+		}
+	}
+}
+
+// ── Conversation ID extraction ───────────────────────────────────────────────
+
+/**
+ * Extract the conversation ID from the chat context history.
+ *
+ * We stash `{ conversationId }` in ChatResult.metadata on every response.
+ * On subsequent requests in the same tab, VSCode replays the history so we
+ * can recover the ID.
+ */
+export function getConversationIdFromHistory(
+	context: vscode.ChatContext,
+): string | undefined {
+	// Walk history in reverse — latest response is most reliable
+	for (let i = context.history.length - 1; i >= 0; i--) {
+		const turn = context.history[i];
+		if (turn instanceof vscode.ChatResponseTurn) {
+			const meta = turn.result?.metadata;
+			if (meta && typeof meta.conversationId === "string") {
+				return meta.conversationId;
+			}
+		}
+	}
+	return undefined;
+}
+
+/** Generate a new unique conversation ID. */
+export function newConversationId(): string {
+	return `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }

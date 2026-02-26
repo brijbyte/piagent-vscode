@@ -2,7 +2,7 @@
   "name": "piagent-vscode",
   "displayName": "PiAgent - AI Coding Agent",
   "description": "AI coding agent for VSCode Chat. Read, write, edit files and run bash commands using Claude, GPT-4, Gemini, and 10+ LLM providers. No permission prompts - tools execute directly. Uses the same shared configuration as the pi CLI.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "brijbyte",
   "author": {
     "name": "BrijByte",
@@ -180,7 +180,8 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.55.0"
+    "@mariozechner/pi-ai": "^0.55.1",
+    "@mariozechner/pi-coding-agent": "^0.55.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",

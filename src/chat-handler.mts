@@ -2,9 +2,9 @@
  * VSCode Chat Participant request handler.
  *
  * Routes incoming chat requests to slash-command handlers or the agent session.
- * Manages the global response-stream swapping so events always flow to the
- * latest chat bubble, even when the user sends follow-up messages while the
- * agent is still streaming.
+ * Each VSCode chat tab gets its own AgentSession (conversation). The
+ * conversation ID is stashed in ChatResult.metadata and recovered from
+ * ChatContext.history on subsequent requests in the same tab.
  */
 
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
@@ -14,56 +14,78 @@ import { resolveReferences } from "./references.mjs";
 import { handleSlashCommand } from "./slash-commands.mjs";
 import { initSession } from "./session.mjs";
 import { updateStatusBar } from "./status-bar.mjs";
-import { cleanupSessionSubscription, state } from "./state.mjs";
+import {
+	getConversationIdFromHistory,
+	newConversationId,
+	state,
+} from "./state.mjs";
 
 export async function handleChatRequest(
 	request: vscode.ChatRequest,
-	_context: vscode.ChatContext,
+	context: vscode.ChatContext,
 	response: vscode.ChatResponseStream,
 	token: vscode.CancellationToken,
 ): Promise<vscode.ChatResult> {
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
-	state.outputChannel.appendLine(
-		`Chat request received: command="${request.command ?? ""}" prompt="${request.prompt.slice(0, 50)}..."`,
-	);
 
-	// Handle slash commands
-	if (request.command) {
-		return handleSlashCommand(request.command, request.prompt, response, workspaceFolder);
+	// Recover or generate a conversation ID for this chat tab
+	let conversationId = getConversationIdFromHistory(context);
+	const isNewConversation = !conversationId || !state.conversations.has(conversationId);
+
+	if (!conversationId) {
+		conversationId = newConversationId();
 	}
 
-	// Show any pending session status from commands
+	// Track this as the active conversation (for status bar, command palette)
+	state.activeConversationId = conversationId;
+
+	// Handle slash commands — pass the conversation ID so they can find/create sessions
+	if (request.command) {
+		return handleSlashCommand(
+			request.command,
+			request.prompt,
+			response,
+			workspaceFolder,
+			conversationId,
+		);
+	}
+
+	// Show any pending session status from command-palette commands
 	if (state.pendingSessionStatus) {
 		response.markdown(`> ${state.pendingSessionStatus}\n\n`);
 		state.pendingSessionStatus = undefined;
 	}
 
-	// Initialize session if needed
-	if (!state.currentSession) {
+	// Get or create the conversation for this chat tab
+	let conv = state.conversations.get(conversationId);
+
+	if (!conv) {
 		try {
 			response.progress("Initializing PiAgent...");
 			const result = await initSession(workspaceFolder);
-			cleanupSessionSubscription();
-			state.currentSession = result.session;
-			state.currentWorkspaceFolder = workspaceFolder;
+
+			conv = {
+				id: conversationId,
+				session: result.session,
+				workspaceFolder,
+				activeResponse: undefined,
+				activeToolCalls: new Map(),
+				sessionUnsubscribe: undefined,
+			};
+			state.conversations.set(conversationId, conv);
+
 			updateStatusBar();
 			response.markdown(`> **New session started** · ${result.model}\n\n`);
 		} catch (err) {
 			const errorMsg = err instanceof Error ? err.message : String(err);
-			state.outputChannel.appendLine(`Error initializing session: ${errorMsg}`);
 			response.markdown(`**Error initializing session:** ${errorMsg}`);
-			return { metadata: { error: true } };
+			return { metadata: { conversationId, error: true } };
 		}
 	}
 
-	const session = state.currentSession!;
+	const session = conv.session;
 
 	// Resolve attached references (files, selections, etc.) into text + images
-	if (request.references.length > 0) {
-		state.outputChannel.appendLine(
-			`Resolving ${request.references.length} reference(s): ${request.references.map((r) => r.id).join(", ")}`,
-		);
-	}
 	const { contextText, images } = await resolveReferences(
 		request.references,
 		workspaceFolder,
@@ -76,90 +98,68 @@ export async function handleChatRequest(
 
 	const promptOptions = images.length > 0 ? { images } : undefined;
 
-	if (contextText) {
-		state.outputChannel.appendLine(
-			`Resolved ${request.references.length} reference(s), ${images.length} image(s)`,
-		);
-	}
-
 	// If the agent is already streaming, queue the message as a follow-up and
 	// redirect future events to this new response stream so the user sees output.
 	if (session.isStreaming) {
-		state.activeResponse = response;
-		state.activeToolCalls = new Map();
+		conv.activeResponse = response;
+		conv.activeToolCalls = new Map();
 		await session.prompt(fullPrompt, { ...promptOptions, streamingBehavior: "followUp" });
 		const queuedCount = session.pendingMessageCount;
 		response.markdown(
 			`> **Queued** · message will be sent after the current response completes (${queuedCount} in queue)\n\n`,
-		);
-		state.outputChannel.appendLine(
-			`Message queued as follow-up (${queuedCount} in queue): "${request.prompt.slice(0, 50)}..."`,
 		);
 
 		// Wait for the agent to finish (including our queued follow-up).
 		// This keeps the response stream alive so events can render into it.
 		return new Promise<vscode.ChatResult>((resolve) => {
 			const checkDone = () => {
-				if (!state.currentSession?.isStreaming) {
-					resolve({ metadata: { success: true } });
+				if (!session.isStreaming) {
+					resolve({ metadata: { conversationId, success: true } });
 				} else {
 					setTimeout(checkDone, 100);
 				}
 			};
 			token.onCancellationRequested(() => {
-				// New message came in while we're waiting — detach from this stream
-				if (state.activeResponse === response) {
-					state.activeResponse = undefined;
+				if (conv!.activeResponse === response) {
+					conv!.activeResponse = undefined;
 				}
-				resolve({ metadata: { cancelled: true } });
+				resolve({ metadata: { conversationId, cancelled: true } });
 			});
 			checkDone();
 		});
 	}
 
-	// This is the primary request — set up the global response stream and subscribe.
-	state.activeResponse = response;
-	state.activeToolCalls = new Map();
+	// This is the primary request — set up the response stream and subscribe.
+	conv.activeResponse = response;
+	conv.activeToolCalls = new Map();
 
-	// Ensure a single global subscription to session events.
-	// If one already exists (shouldn't happen since isStreaming was false), clean it up.
-	if (state.sessionUnsubscribe) {
-		state.sessionUnsubscribe();
+	// Ensure a single subscription per conversation.
+	if (conv.sessionUnsubscribe) {
+		conv.sessionUnsubscribe();
 	}
-	state.sessionUnsubscribe = session.subscribe((event: AgentSessionEvent) => {
-		if (!state.activeResponse) return;
-		handleSessionEvent(event, state.activeResponse, state.activeToolCalls);
+	conv.sessionUnsubscribe = session.subscribe((event: AgentSessionEvent) => {
+		if (!conv!.activeResponse) return;
+		handleSessionEvent(event, conv!.activeResponse, conv!.activeToolCalls);
 	});
 
 	token.onCancellationRequested(() => {
-		// VSCode cancelled this request (user sent a new message).
-		// Don't abort the session — just detach from this response stream.
-		// The new request handler will attach the new response stream.
-		if (state.activeResponse === response) {
-			state.activeResponse = undefined;
+		if (conv!.activeResponse === response) {
+			conv!.activeResponse = undefined;
 		}
-		state.outputChannel.appendLine(
-			"Response stream closed by VSCode (user sent a new message or cancelled)",
-		);
 	});
 
 	try {
-		// Send prompt to agent — this awaits the full turn including tool calls and follow-ups
 		await session.prompt(fullPrompt, promptOptions);
-		state.outputChannel.appendLine("Prompt completed successfully");
-		return { metadata: { success: true } };
+		return { metadata: { conversationId, success: true } };
 	} catch (err) {
 		const errorMsg = err instanceof Error ? err.message : String(err);
-		state.outputChannel.appendLine(`Error during prompt: ${errorMsg}`);
-		if (state.activeResponse === response) {
+		if (conv.activeResponse === response) {
 			response.markdown(`\n\n**Error:** ${errorMsg}`);
 		}
-		return { metadata: { error: true } };
+		return { metadata: { conversationId, error: true } };
 	} finally {
-		// Only clean up the subscription if this response is still the active one.
-		// If a newer request took over, it owns the subscription now.
-		if (state.activeResponse === response) {
-			state.activeResponse = undefined;
+		if (conv.activeResponse === response) {
+			conv.activeResponse = undefined;
 		}
 	}
 }

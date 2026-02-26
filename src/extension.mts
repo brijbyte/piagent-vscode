@@ -17,7 +17,7 @@ import * as vscode from "vscode";
 import { handleChatRequest } from "./chat-handler.mjs";
 import { cmdLogin, cmdLogout, cmdNewSession, cmdResumeSession, cmdSelectModel } from "./commands.mjs";
 import { updateStatusBar } from "./status-bar.mjs";
-import { cleanupSessionSubscription, state } from "./state.mjs";
+import { removeConversation, state } from "./state.mjs";
 
 export function activate(context: vscode.ExtensionContext) {
 	state.extensionContext = context;
@@ -44,11 +44,13 @@ export function activate(context: vscode.ExtensionContext) {
 		}),
 	);
 
-	state.outputChannel.appendLine("Chat participant registered: piagent.agent");
+
 }
 
 export function deactivate() {
 	state.outputChannel?.appendLine("PiAgent extension deactivated");
-	cleanupSessionSubscription();
-	state.currentSession = undefined;
+	// Clean up all conversations
+	for (const id of Array.from(state.conversations.keys())) {
+		removeConversation(id);
+	}
 }

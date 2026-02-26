@@ -170,12 +170,6 @@ interface ResolveResult {
 async function resolveOne(ref: vscode.ChatPromptReference): Promise<ResolveResult> {
 	const { value } = ref;
 
-	state.outputChannel.appendLine(
-		`[References] id=${ref.id} keys=${
-			value && typeof value === "object" ? Object.keys(value as object).join(",") : typeof value
-		}`,
-	);
-
 	// Image wrapper: { mimeType: "image/png", reference: { fsPath, ... } }
 	if (isImageRef(value)) {
 		return resolveImage(value);
@@ -201,11 +195,8 @@ async function resolveOne(ref: vscode.ChatPromptReference): Promise<ResolveResul
 		return { text: value };
 	}
 
-	// Unknown: log and best-effort serialize
+	// Unknown: best-effort serialize
 	if (value !== null && value !== undefined) {
-		state.outputChannel.appendLine(
-			`[References] Unhandled reference: ${JSON.stringify(value, null, 2).slice(0, 500)}`,
-		);
 		return { text: JSON.stringify(value) };
 	}
 
@@ -219,10 +210,6 @@ async function resolveImage(ref: ImageRefLike): Promise<ResolveResult> {
 
 	const data = await vscode.workspace.fs.readFile(uri);
 	const base64 = Buffer.from(data).toString("base64");
-
-	state.outputChannel.appendLine(
-		`[References] Image: ${relativePath} (${mimeType}, ${formatBytes(data.byteLength)})`,
-	);
 
 	return {
 		text: `- ${relativePath} (image, ${formatBytes(data.byteLength)})`,
@@ -266,10 +253,6 @@ async function resolveUri(uriLike: UriLike): Promise<ResolveResult> {
 	if (mimeType) {
 		const data = await vscode.workspace.fs.readFile(uri);
 		const base64 = Buffer.from(data).toString("base64");
-
-		state.outputChannel.appendLine(
-			`[References] Image (by ext): ${relativePath} (${mimeType}, ${formatBytes(data.byteLength)})`,
-		);
 
 		return {
 			text: `- ${relativePath} (image, ${formatBytes(data.byteLength)})`,
