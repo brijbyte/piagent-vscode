@@ -3,7 +3,9 @@
 [![VSCode Marketplace](https://img.shields.io/visual-studio-marketplace/v/brijbyte.piagent-vscode?style=flat-square&label=marketplace)](https://marketplace.visualstudio.com/items?itemName=brijbyte.piagent-vscode)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](./LICENSE)
 
-A full-featured AI coding agent that lives inside VSCode's Chat panel. Powered by [pi](https://pi.dev) ([source](https://github.com/badlogic/pi-mono)) — the same engine behind the [pi CLI](https://www.npmjs.com/package/@mariozechner/pi-coding-agent). Mention `@piagent` and let it read, write, edit files and execute bash commands to complete coding tasks autonomously.
+A full-featured AI coding agent that lives inside VSCode's Chat panel. Powered by [pi-coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) — the same engine behind the [pi CLI](https://www.npmjs.com/package/@mariozechner/pi-coding-agent). Mention `@piagent` and let it read, write, edit files and execute bash commands to complete coding tasks autonomously.
+
+> **Note:** All features below — multi-provider support, tool execution, session management, OAuth login, auto-compaction, and more — are provided by the [pi-coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) library. This extension is a thin VSCode integration layer on top of that powerful foundation.
 
 ## Why PiAgent?
 
@@ -122,6 +124,7 @@ Type `@piagent /` to see all available commands:
 | `/session` | Show session info and stats |
 | `/login` | Login with an OAuth provider (Anthropic, OpenAI, GitHub Copilot, Google) |
 | `/logout` | Logout from an OAuth provider |
+| `/settings` | Open extension settings |
 | `/help` | Show available commands and shortcuts |
 
 ## Command Palette
@@ -148,7 +151,7 @@ PiAgent shares most configuration with the [pi CLI](https://pi.dev) — API keys
 
 ### VSCode Settings
 
-PiAgent has one VSCode-specific setting to control what appears in the status bar.
+PiAgent has VSCode-specific settings for status bar display and agent behavior. Use `/settings` in chat or open VSCode settings and search for "piagent".
 
 #### `piagent.statusBar.show`
 
@@ -192,6 +195,22 @@ Each item can be toggled independently:
 ```
 
 The tooltip (hover over the status bar) always shows the full breakdown regardless of this setting.
+
+#### `piagent.autoCompaction`
+
+Automatically compact the conversation context when approaching the model's token limit. When enabled (default: `true`), older messages are summarized to free up space while preserving recent context.
+
+#### `piagent.autoRetry`
+
+Automatically retry failed API requests with exponential backoff (default: `true`). Helps handle transient network errors and rate limits.
+
+#### `piagent.blockImages`
+
+Block image attachments from being sent to the model (default: `false`). Useful for reducing token usage or when using models that don't support vision.
+
+#### `piagent.thinkingLevel`
+
+Default thinking level for reasoning models like Claude with extended thinking or o1 (default: `"medium"`). Options: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`. Higher levels allow more thorough reasoning but use more tokens.
 
 ### API Keys
 
@@ -256,4 +275,4 @@ Sessions are stored at `~/.pi/agent/sessions/` and `<project>/.pi/sessions/`. Th
 
 ## Credits
 
-Built on [pi](https://pi.dev) ([GitHub](https://github.com/badlogic/pi-mono)) by [Mario Zechner](https://github.com/badlogic).
+Built on [pi-coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) and [pi-ai](https://github.com/badlogic/pi-mono/tree/main/packages/ai) by [Mario Zechner](https://github.com/badlogic). These libraries provide all the core functionality — multi-provider LLM support, tool execution, session management, OAuth authentication, and more. This extension is a VSCode integration layer that brings that power to the Chat panel.

@@ -1,0 +1,118 @@
+# PiAgent VSCode Extension - Agent Guide
+
+AI coding agent for VSCode Chat using [pi-coding-agent](https://github.com/badlogic/pi-mono).
+
+## Quick Reference
+
+```bash
+npm run build      # Build extension
+npm run check      # TypeScript type check
+npm run package    # Create .vsix package
+```
+
+## Architecture
+
+```
+src/
+├── extension.mts      # Entry point: activate/deactivate, registers commands & chat participant
+├── state.mts          # Shared mutable state (conversations, outputChannel, activeConversationId)
+├── chat-handler.mts   # Main chat request handler, routes to slash commands or agent session
+├── event-handler.mts  # AgentSessionEvent → ChatResponseStream rendering (tool output, markdown)
+├── slash-commands.mts # /new, /resume, /model, /compact, /session, /login, /logout, /help, /settings
+├── commands.mts       # Command palette commands (same functionality as slash commands)
+├── session.mts        # Session creation helpers, VSCode-specific system prompt
+├── settings.mts       # VSCode settings → AgentSession settings bridge
+├── status-bar.mts     # Status bar formatting (model, tokens, cost, context usage)
+└── references.mts     # Resolve VSCode chat references (files, selections, images)
+```
+
+## Key Concepts
+
+### Conversations vs Sessions
+- **Conversation**: Per-chat-tab state in VSCode (stored in `state.conversations` Map)
+- **Session**: pi-coding-agent session persisted to disk (`~/.pi/agent/sessions/`)
+- Each VSCode chat tab gets its own conversation, which wraps an AgentSession
+
+### State Management (`state.mts`)
+```typescript
+state.conversations        // Map<conversationId, ChatConversation>
+state.activeConversationId // Currently active chat tab
+state.pendingSessionStatus // Status message for next chat request
+state.outputChannel        // VSCode output channel for logs
+state.extensionContext     // VSCode extension context
+```
+
+### Chat Flow
+1. User sends message → `handleChatRequest()` in `chat-handler.mts`
+2. If slash command → route to `slash-commands.mts`
+3. Otherwise → get/create conversation, resolve references, call `session.prompt()`
+4. Session events → `handleSessionEvent()` renders to `ChatResponseStream`
+
+### Tool Rendering (`event-handler.mts`)
+- `tool_execution_start`: Shows tool name + context (file path, command preview)
+- `tool_execution_end`: Shows truncated result in fenced code block
+- Results truncated to 500 chars in chat; full output was in output channel (now removed)
+
+## Configuration
+
+### Shared with pi CLI (`~/.pi/agent/`)
+- `auth.json` - API keys and OAuth tokens
+- `settings.json` - Global settings
+- `models.json` - Custom model definitions
+- `sessions/` - Persisted sessions
+
+### VSCode-specific (`settings.mts`)
+Settings are read from VSCode config and applied to all sessions immediately on change.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `piagent.statusBar.show` | array | all | Stats to show in status bar |
+| `piagent.autoCompaction` | boolean | true | Auto-compact when near token limit |
+| `piagent.autoRetry` | boolean | true | Retry failed API requests |
+| `piagent.blockImages` | boolean | false | Block image attachments |
+| `piagent.thinkingLevel` | string | "medium" | Thinking level for reasoning models |
+
+## Dependencies
+
+- `@mariozechner/pi-coding-agent` - Core agent session, tools, model registry
+- `@mariozechner/pi-ai` - LLM provider APIs, OAuth, model types
+
+## Common Tasks
+
+### Adding a new slash command
+1. Add handler function in `slash-commands.mts`
+2. Add case in `handleSlashCommand()` switch
+3. Add command definition in `package.json` under `chatParticipants[0].commands`
+4. Update `/help` command output in `slashHelp()`
+
+### Adding a new setting
+1. Add to `package.json` under `contributes.configuration.properties`
+2. Add to `PiAgentSettings` interface in `settings.mts`
+3. Read in `getSettings()` and apply in `applySettingsToSession()`
+4. Add config change listener in `extension.mts` if needed
+
+### Adding a command palette command
+1. Add handler function in `commands.mts`
+2. Register in `extension.mts` via `vscode.commands.registerCommand()`
+3. Add command definition in `package.json` under `contributes.commands`
+
+### Modifying status bar display
+Edit `status-bar.mts` - `updateStatusBar()` and `formatTokenStat()`
+
+### Changing tool output rendering
+Edit `event-handler.mts` - `handleSessionEvent()` cases for `tool_execution_*`
+
+## Build Notes
+
+- Uses esbuild with ESM → CJS conversion
+- External: `vscode`, `koffi`, `@mariozechner/clipboard`
+- Polyfill for `import.meta.url` in `import-meta-polyfill.js`
+- Output: `dist/extension.js` (~7MB bundled)
+
+## Logging
+
+Minimal logging to output channel:
+- Extension activated/deactivated (lifecycle)
+- Reference resolution failures (errors only)
+
+All user-facing feedback goes through `ChatResponseStream.markdown()` or `response.progress()`.
