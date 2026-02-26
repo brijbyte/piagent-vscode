@@ -436,7 +436,8 @@
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.55.1",
-    "@mariozechner/pi-coding-agent": "^0.55.1"
+    "@mariozechner/pi-coding-agent": "^0.55.1",
+    "@vscode/chat-extension-utils": "^0.0.0-alpha.5"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",

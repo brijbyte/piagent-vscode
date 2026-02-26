@@ -22,10 +22,11 @@ A full-featured AI coding agent that lives inside VSCode's Chat panel. Powered b
 2. Authenticate with a provider — pick one:
 
    **Option A: OAuth login (recommended for subscriptions)**
-   
+
    Open the Chat panel, type `@piagent /login`, and select your provider. PiAgent opens your browser to complete authentication. Supports Anthropic (Claude Pro/Max), OpenAI (ChatGPT Plus/Pro), GitHub Copilot, and Google (Gemini CLI / Antigravity).
 
    **Option B: API key via environment variable**
+
    ```bash
    export ANTHROPIC_API_KEY=sk-ant-...
    # or
@@ -35,7 +36,7 @@ A full-featured AI coding agent that lives inside VSCode's Chat panel. Powered b
    ```
 
    **Option C: API key in auth file**
-   
+
    Store keys in `~/.pi/agent/auth.json` (same file the pi CLI uses).
 
 3. Open VSCode's Chat panel (`Ctrl+Shift+I` / `Cmd+Shift+I`)
@@ -53,12 +54,12 @@ Mention `@piagent` in VSCode's built-in Chat panel. PiAgent registers as a nativ
 
 PiAgent has four tools:
 
-| Tool | What it does |
-|------|-------------|
-| `read` | Read file contents (text and images) |
-| `write` | Create or overwrite files |
-| `edit` | Surgical find-and-replace edits |
-| `bash` | Execute shell commands |
+| Tool    | What it does                         |
+| ------- | ------------------------------------ |
+| `read`  | Read file contents (text and images) |
+| `write` | Create or overwrite files            |
+| `edit`  | Surgical find-and-replace edits      |
+| `bash`  | Execute shell commands               |
 
 All tool output streams to the Chat panel in real time. Full output is available in the Output channel (`View → Output → PiAgent`).
 
@@ -66,22 +67,22 @@ All tool output streams to the Chat panel in real time. Full output is available
 
 PiAgent supports every provider that pi-coding-agent supports:
 
-| Provider | Models |
-|----------|--------|
-| **Anthropic** | Claude 4 Sonnet, Claude 4 Opus, Claude 3.5 Sonnet, Claude 3.5 Haiku |
-| **OpenAI** | GPT-4o, GPT-4.1, o3, o4-mini |
-| **Google** | Gemini 2.5 Pro, Gemini 2.5 Flash |
-| **Amazon Bedrock** | Claude, Mistral, and other Bedrock-hosted models |
-| **Azure OpenAI** | GPT-4o, GPT-4.1 via Azure deployments |
-| **DeepSeek** | DeepSeek V3, DeepSeek R1 |
-| **Mistral** | Mistral Large, Codestral |
-| **Groq** | LLaMA, Mixtral |
-| **Cerebras** | LLaMA |
-| **xAI** | Grok |
-| **OpenRouter** | Any model available on OpenRouter |
-| **Vercel AI Gateway** | Any model via Vercel |
-| **Hugging Face** | Inference API models |
-| **And more** | ZAI, OpenCode Zen, Kimi, MiniMax |
+| Provider              | Models                                                              |
+| --------------------- | ------------------------------------------------------------------- |
+| **Anthropic**         | Claude 4 Sonnet, Claude 4 Opus, Claude 3.5 Sonnet, Claude 3.5 Haiku |
+| **OpenAI**            | GPT-4o, GPT-4.1, o3, o4-mini                                        |
+| **Google**            | Gemini 2.5 Pro, Gemini 2.5 Flash                                    |
+| **Amazon Bedrock**    | Claude, Mistral, and other Bedrock-hosted models                    |
+| **Azure OpenAI**      | GPT-4o, GPT-4.1 via Azure deployments                               |
+| **DeepSeek**          | DeepSeek V3, DeepSeek R1                                            |
+| **Mistral**           | Mistral Large, Codestral                                            |
+| **Groq**              | LLaMA, Mixtral                                                      |
+| **Cerebras**          | LLaMA                                                               |
+| **xAI**               | Grok                                                                |
+| **OpenRouter**        | Any model available on OpenRouter                                   |
+| **Vercel AI Gateway** | Any model via Vercel                                                |
+| **Hugging Face**      | Inference API models                                                |
+| **And more**          | ZAI, OpenCode Zen, Kimi, MiniMax                                    |
 
 Switch models at any time with `/model` or `Cmd+Shift+M`.
 
@@ -90,6 +91,7 @@ Switch models at any time with `/model` or `Cmd+Shift+M`.
 Use `/login` to authenticate with subscription-based providers directly from VSCode — no need to manually edit JSON files or set environment variables. PiAgent opens your browser, completes the OAuth flow, and saves credentials to `~/.pi/agent/auth.json`.
 
 Supported OAuth providers:
+
 - **Anthropic** — Claude Pro / Max subscription
 - **OpenAI** — ChatGPT Plus / Pro (Codex)
 - **GitHub Copilot** — existing Copilot subscription
@@ -115,34 +117,34 @@ When the conversation approaches the model's context window limit, PiAgent autom
 
 Type `@piagent /` to see all available commands:
 
-| Command | Description |
-|---------|-------------|
-| `/new` | Start a new session |
-| `/resume` | Resume a previous session |
-| `/model` | Select a different model |
-| `/compact` | Compact the session context |
-| `/session` | Show session info and stats |
-| `/login` | Login with an OAuth provider (Anthropic, OpenAI, GitHub Copilot, Google) |
-| `/logout` | Logout from an OAuth provider |
-| `/settings` | Open extension settings |
-| `/help` | Show available commands and shortcuts |
+| Command     | Description                                                              |
+| ----------- | ------------------------------------------------------------------------ |
+| `/new`      | Start a new session                                                      |
+| `/resume`   | Resume a previous session                                                |
+| `/model`    | Select a different model                                                 |
+| `/compact`  | Compact the session context                                              |
+| `/session`  | Show session info and stats                                              |
+| `/login`    | Login with an OAuth provider (Anthropic, OpenAI, GitHub Copilot, Google) |
+| `/logout`   | Logout from an OAuth provider                                            |
+| `/settings` | Open extension settings                                                  |
+| `/help`     | Show available commands and shortcuts                                    |
 
 ## Command Palette
 
 Open the command palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and search for:
 
-| Command | Description |
-|---------|-------------|
-| `PiAgent: New Session` | Start a fresh session |
-| `PiAgent: Resume Session` | Continue a previous session |
-| `PiAgent: Select Model` | Choose a different model |
-| `PiAgent: Login` | Login with an OAuth provider |
-| `PiAgent: Logout` | Logout from an OAuth provider |
+| Command                   | Description                   |
+| ------------------------- | ----------------------------- |
+| `PiAgent: New Session`    | Start a fresh session         |
+| `PiAgent: Resume Session` | Continue a previous session   |
+| `PiAgent: Select Model`   | Choose a different model      |
+| `PiAgent: Login`          | Login with an OAuth provider  |
+| `PiAgent: Logout`         | Logout from an OAuth provider |
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
+| Shortcut                                         | Action       |
+| ------------------------------------------------ | ------------ |
 | `Cmd+Shift+M` (Mac) / `Ctrl+Shift+M` (Win/Linux) | Select model |
 
 ## Configuration
@@ -163,16 +165,17 @@ claude-opus-4-6 ↑141 / ↓26k / R7.8M / W99k / $5.159 (sub) / 49.7%/200k (auto
 
 Each item can be toggled independently:
 
-| Value | Status bar | Description |
-|-------|-----------|-------------|
-| `inputTokens` | `↑141` | Cumulative input tokens sent to the model |
-| `outputTokens` | `↓26k` | Cumulative output tokens received |
-| `cacheRead` | `R7.8M` | Tokens read from prompt cache |
-| `cacheWrite` | `W99k` | Tokens written to prompt cache |
-| `cost` | `$5.159 (sub)` | Session cost in USD. Shows `(sub)` for OAuth subscriptions |
+| Value          | Status bar          | Description                                                       |
+| -------------- | ------------------- | ----------------------------------------------------------------- |
+| `inputTokens`  | `↑141`              | Cumulative input tokens sent to the model                         |
+| `outputTokens` | `↓26k`              | Cumulative output tokens received                                 |
+| `cacheRead`    | `R7.8M`             | Tokens read from prompt cache                                     |
+| `cacheWrite`   | `W99k`              | Tokens written to prompt cache                                    |
+| `cost`         | `$5.159 (sub)`      | Session cost in USD. Shows `(sub)` for OAuth subscriptions        |
 | `contextUsage` | `49.7%/200k (auto)` | Context window usage %. Shows `(auto)` when auto-compaction is on |
 
 **Default** — show everything:
+
 ```json
 "piagent.statusBar.show": [
   "inputTokens",
@@ -185,11 +188,13 @@ Each item can be toggled independently:
 ```
 
 **Show only cost and context usage:**
+
 ```json
 "piagent.statusBar.show": ["cost", "contextUsage"]
 ```
 
 **Show only the model name (hide all stats):**
+
 ```json
 "piagent.statusBar.show": []
 ```
@@ -256,10 +261,6 @@ PiAgent is an autonomous coding agent with file system access and shell executio
 ### Do I need the pi CLI installed?
 
 No. PiAgent bundles `pi-coding-agent` as a dependency. However, if you already use the [pi CLI](https://pi.dev), they share the same configuration directory (`~/.pi/agent/`), so API keys, settings, sessions, and custom models work in both places.
-
-### Can I use my Anthropic/OpenAI subscription instead of an API key?
-
-Yes. Use `/login` directly in VSCode to authenticate with your existing subscription (Anthropic Claude Pro/Max, ChatGPT Plus/Pro, GitHub Copilot, or Google Gemini). PiAgent opens your browser, completes the OAuth flow, and saves credentials to `~/.pi/agent/auth.json`. If you've already authenticated via `pi /login` in the CLI, PiAgent picks up the stored credentials automatically.
 
 ### Does PiAgent ask for permission before running tools?
 
