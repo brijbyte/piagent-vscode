@@ -51,36 +51,33 @@ jobs:
               \"flags\": 512
             }")
           
-          # Extract version from response
-          MARKETPLACE_VERSION=$(echo "$MARKETPLACE_RESPONSE" | node -p "
-            try {
-              const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              const ext = data.results?.[0]?.extensions?.[0];
-              console.log(ext?.versions?.[0]?.version || '0.0.0');
-            } catch {
-              console.log('0.0.0');
-            }
-          " 2>/dev/null || echo "0.0.0")
+          # Extract version from response using node
+          MARKETPLACE_VERSION=$(node -e "
+            const data = JSON.parse(process.argv[1]);
+            const ext = data.results?.[0]?.extensions?.[0];
+            const version = ext?.versions?.[0]?.version || '0.0.0';
+            process.stdout.write(version);
+          " "$MARKETPLACE_RESPONSE" 2>/dev/null || echo "0.0.0")
           
           echo "Marketplace version: $MARKETPLACE_VERSION"
           echo "marketplace_version=$MARKETPLACE_VERSION" >> $GITHUB_OUTPUT
           
-          # Compare versions using node semver comparison
-          SHOULD_PUBLISH=$(node -p "
-            const local = '$LOCAL_VERSION'.split('.').map(Number);
-            const market = '$MARKETPLACE_VERSION'.split('.').map(Number);
+          # Compare versions using node
+          SHOULD_PUBLISH=$(node -e "
+            const local = process.argv[1].split('.').map(Number);
+            const market = process.argv[2].split('.').map(Number);
             for (let i = 0; i < 3; i++) {
               if ((local[i] || 0) > (market[i] || 0)) {
-                console.log('true');
+                process.stdout.write('true');
                 process.exit(0);
               }
               if ((local[i] || 0) < (market[i] || 0)) {
-                console.log('false');
+                process.stdout.write('false');
                 process.exit(0);
               }
             }
-            console.log('false');
-          ")
+            process.stdout.write('false');
+          " "$LOCAL_VERSION" "$MARKETPLACE_VERSION")
           
           echo "Should publish: $SHOULD_PUBLISH"
           echo "should_publish=$SHOULD_PUBLISH" >> $GITHUB_OUTPUT
