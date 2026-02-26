@@ -36,6 +36,17 @@ You are running inside the VSCode Chat panel as the @piagent chat participant.
 - Use code blocks with language identifiers for syntax highlighting.
 - When referencing files, use inline code: \`path/to/file.ts\`.
 - For file paths, prefer relative paths from the workspace root.
+
+## Workspace context
+
+Before starting work on a task, check for project context files that may contain important guidelines, conventions, or instructions. Common locations include:
+
+- \`AGENTS.md\` or \`CLAUDE.md\` in the workspace root
+- \`.github/copilot-instructions.md\`
+- \`docs/CONTRIBUTING.md\` or \`CONTRIBUTING.md\`
+- \`.cursorrules\` or \`.cursor/rules\`
+
+Read these files when they exist and are relevant to your task. You don't need to read them for every request — use your judgment based on the task at hand.
 `.trim();
 
 /**
