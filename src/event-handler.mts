@@ -7,7 +7,7 @@
 
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import * as vscode from "vscode";
-import { updateStatusBar } from "./status-bar.mjs";
+import { updateStatusBar, setThinkingStatus } from "./status-bar.mjs";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -206,8 +206,12 @@ export function handleSessionEvent(
 			if (evt.type === "text_delta") {
 				const delta = (evt as { type: "text_delta"; delta: string }).delta;
 				response.markdown(delta);
+			} else if (evt.type === "thinking_start") {
+				setThinkingStatus(true);
+			} else if (evt.type === "thinking_end") {
+				setThinkingStatus(false);
 			}
-			// thinking_delta is ignored for now
+			// thinking_delta content is not displayed
 			break;
 		}
 
@@ -253,7 +257,8 @@ export function handleSessionEvent(
 		}
 
 		case "message_end": {
-			// Update status bar with latest token usage after each assistant message
+			// Clear thinking status and update status bar with latest token usage
+			setThinkingStatus(false);
 			updateStatusBar();
 			break;
 		}

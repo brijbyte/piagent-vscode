@@ -22,6 +22,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { join } from "path";
 import * as vscode from "vscode";
+import { applySettingsToSession } from "./settings.mjs";
 import { updateStatusBar } from "./status-bar.mjs";
 import {
 	type ChatConversation,
@@ -59,6 +60,9 @@ export async function cmdNewSession(): Promise<void> {
 			sessionManager,
 			resourceLoader,
 		});
+
+		// Apply VSCode settings to the new session
+		applySettingsToSession(session);
 
 		// Create a new conversation for the active chat tab (or a new ID if none)
 		const conversationId = state.activeConversationId ?? newConversationId();
@@ -127,6 +131,9 @@ export async function cmdResumeSession(): Promise<void> {
 			sessionManager,
 			resourceLoader,
 		});
+
+		// Apply VSCode settings to the resumed session
+		applySettingsToSession(session);
 
 		const conversationId = state.activeConversationId ?? newConversationId();
 		const existing = state.conversations.get(conversationId);

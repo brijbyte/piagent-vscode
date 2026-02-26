@@ -22,6 +22,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { join } from "path";
 import * as vscode from "vscode";
+import { applySettingsToSession } from "./settings.mjs";
 import { updateStatusBar } from "./status-bar.mjs";
 import {
 	type ChatConversation,
@@ -161,6 +162,8 @@ export async function handleSlashCommand(
 			return slashLogout(response, conversationId);
 		case "help":
 			return slashHelp(response, conversationId);
+		case "settings":
+			return slashSettings(response, conversationId);
 		default:
 			response.markdown(`Unknown command: \`/${command}\``);
 			return { metadata: { conversationId, error: true } };
@@ -190,6 +193,9 @@ async function slashNew(
 			sessionManager,
 			resourceLoader,
 		});
+
+		// Apply VSCode settings to the new session
+		applySettingsToSession(session);
 
 		// Clean up any existing conversation for this tab
 		const existing = state.conversations.get(conversationId);
@@ -266,6 +272,9 @@ async function slashResume(
 			sessionManager,
 			resourceLoader,
 		});
+
+		// Apply VSCode settings to the resumed session
+		applySettingsToSession(session);
 
 		// Clean up any existing conversation for this tab
 		const existing = state.conversations.get(conversationId);
@@ -584,6 +593,7 @@ async function slashHelp(
 | \`/session\` | Show session info and stats |
 | \`/login\` | Login with an OAuth provider (Anthropic, OpenAI, GitHub Copilot, Google) |
 | \`/logout\` | Logout from an OAuth provider |
+| \`/settings\` | Open extension settings |
 | \`/help\` | Show this help |
 
 ### Keyboard Shortcuts
@@ -602,5 +612,21 @@ Each chat tab gets its own independent session.
 `;
 
 	response.markdown(help);
+	return { metadata: { conversationId, success: true } };
+}
+
+// ── /settings ────────────────────────────────────────────────────────────────
+
+async function slashSettings(
+	response: vscode.ChatResponseStream,
+	conversationId: string,
+): Promise<vscode.ChatResult> {
+	// Open VSCode settings filtered to piagent settings
+	await vscode.commands.executeCommand(
+		"workbench.action.openSettings",
+		"@ext:brijbyte.piagent-vscode",
+	);
+
+	response.markdown("> **Settings opened** · Changes apply immediately to all sessions");
 	return { metadata: { conversationId, success: true } };
 }

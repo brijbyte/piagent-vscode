@@ -16,6 +16,7 @@
 import * as vscode from "vscode";
 import { handleChatRequest } from "./chat-handler.mjs";
 import { cmdLogin, cmdLogout, cmdNewSession, cmdResumeSession, cmdSelectModel } from "./commands.mjs";
+import { applySettingsToAllSessions } from "./settings.mjs";
 import { updateStatusBar } from "./status-bar.mjs";
 import { removeConversation, state } from "./state.mjs";
 
@@ -36,10 +37,19 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand("piagent.selectModel", cmdSelectModel),
 		vscode.commands.registerCommand("piagent.login", cmdLogin),
 		vscode.commands.registerCommand("piagent.logout", cmdLogout),
-		// Re-render status bar when the user changes piagent.statusBar.show
+		// React to settings changes
 		vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration("piagent.statusBar.show")) {
 				updateStatusBar();
+			}
+			// Apply agent settings changes to all active sessions
+			if (
+				e.affectsConfiguration("piagent.autoCompaction") ||
+				e.affectsConfiguration("piagent.autoRetry") ||
+				e.affectsConfiguration("piagent.blockImages") ||
+				e.affectsConfiguration("piagent.thinkingLevel")
+			) {
+				applySettingsToAllSessions();
 			}
 		}),
 	);

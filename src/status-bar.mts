@@ -10,6 +10,7 @@ import * as vscode from "vscode";
 import { getActiveConversation, state } from "./state.mjs";
 
 let statusBarItem: vscode.StatusBarItem | undefined;
+let isThinking = false;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,16 @@ function getStatusBarItemOrder(): StatusBarItemKey[] {
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Set the thinking status (shown in status bar while model is reasoning).
+ */
+export function setThinkingStatus(thinking: boolean): void {
+	if (isThinking !== thinking) {
+		isThinking = thinking;
+		updateStatusBar();
+	}
+}
 
 export function ensureStatusBar(): vscode.StatusBarItem {
 	if (!statusBarItem) {
@@ -136,7 +147,8 @@ export function updateStatusBar(): void {
 	}
 
 	const statsStr = parts.length > 0 ? ` / ${parts.join(" / ")}` : "";
-	bar.text = `$(robot) ${model.id}${statsStr}`;
+	const thinkingIndicator = isThinking ? " $(loading~spin) thinking" : "";
+	bar.text = `$(robot) ${model.id}${thinkingIndicator}${statsStr}`;
 
 	// Build a detailed tooltip (always shows everything regardless of setting)
 	const tooltipLines = [`Model: ${model.provider}/${model.id}`];

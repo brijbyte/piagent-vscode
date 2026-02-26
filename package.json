@@ -101,6 +101,10 @@
           {
             "name": "help",
             "description": "Show available commands"
+          },
+          {
+            "name": "settings",
+            "description": "Open extension settings"
           }
         ]
       }
@@ -168,6 +172,38 @@
           ],
           "markdownDescription": "Controls which token usage stats are shown in the status bar next to the model name. Remove items from the array to hide them.\n\nExample status bar: `$(robot) claude-opus-4-6 ↑141 / ↓26k / R7.8M / W99k / $5.159 (sub) / 49.7%/200k (auto)`\n\n| Value | Status bar | Description |\n|---|---|---|\n| `inputTokens` | `↑141` | Input tokens |\n| `outputTokens` | `↓26k` | Output tokens |\n| `cacheRead` | `R7.8M` | Cache read tokens |\n| `cacheWrite` | `W99k` | Cache write tokens |\n| `cost` | `$5.159 (sub)` | Session cost |\n| `contextUsage` | `49.7%/200k (auto)` | Context window usage |\n\nSet to an empty array `[]` to show only the model name.",
           "scope": "window"
+        },
+        "piagent.autoCompaction": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Automatically compact the conversation context when approaching the model's token limit. When enabled, older messages are summarized to free up space while preserving recent context.",
+          "scope": "window"
+        },
+        "piagent.autoRetry": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Automatically retry failed API requests with exponential backoff. Helps handle transient network errors and rate limits.",
+          "scope": "window"
+        },
+        "piagent.blockImages": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Block image attachments from being sent to the model. Useful for reducing token usage or when using models that don't support vision.",
+          "scope": "window"
+        },
+        "piagent.thinkingLevel": {
+          "type": "string",
+          "enum": ["off", "minimal", "low", "medium", "high"],
+          "default": "medium",
+          "enumDescriptions": [
+            "Disable extended thinking (fastest, cheapest)",
+            "Minimal thinking budget",
+            "Low thinking budget",
+            "Medium thinking budget (default)",
+            "High thinking budget (most thorough)"
+          ],
+          "markdownDescription": "Default thinking level for reasoning models (Claude with extended thinking, o1, etc.). Higher levels allow more thorough reasoning but use more tokens.",
+          "scope": "window"
         }
       }
     }
@@ -175,7 +211,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "esbuild src/extension.mts --bundle --outfile=dist/extension.js --external:vscode --external:koffi --external:@mariozechner/clipboard --format=cjs --platform=node --inject:src/import-meta-polyfill.js --define:import.meta.url=importMetaUrl --minify",
-    "build:watch": "npm run build -- --watch",
+    "build:watch": "pnpm run build -- --watch",
     "package": "vsce package --no-dependencies",
     "check": "tsc --noEmit"
   },
@@ -185,9 +221,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.21",
-    "@types/vscode": "^1.100.0",
-    "@vscode/vsce": "^3.5.0",
-    "esbuild": "^0.25.5",
-    "typescript": "^5.7.3"
+    "@types/vscode": "^1.109.0",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.9.3"
   }
 }

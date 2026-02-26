@@ -11,6 +11,7 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@mariozechner/pi-coding-agent";
+import { applySettingsToSession } from "./settings.mjs";
 
 export interface InitSessionResult {
 	session: AgentSession;
@@ -65,6 +66,9 @@ export async function initSession(cwd: string): Promise<InitSessionResult> {
 		sessionManager,
 		resourceLoader,
 	});
+
+	// Apply VSCode settings to the new session
+	applySettingsToSession(session);
 
 	const model = session.model ? `${session.model.provider}/${session.model.id}` : "no model";
 
