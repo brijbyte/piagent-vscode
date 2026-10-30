@@ -18,7 +18,7 @@
     "url": "https://github.com/brijbyte/piagent-vscode"
   },
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.144.0"
   },
   "categories": [
     "AI",
