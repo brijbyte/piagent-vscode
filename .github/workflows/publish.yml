@@ -18,12 +18,12 @@ jobs:
       marketplace_version: ${{ steps.check.outputs.marketplace_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4.4.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4.4.0
         with:
-          node-version: '24'
+          node-version: '24.22.2'
 
       - name: Check version against marketplace
         id: check
@@ -91,12 +91,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4.4.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4.4.0
         with:
-          node-version: '24'
+          node-version: '24.22.2'
 
       - name: Install dependencies
         run: npm install
@@ -116,7 +116,7 @@ jobs:
           npx @vscode/vsce publish -p $VSCE_PAT
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2.2.1
+        uses: softprops/action-gh-release@v2.6.2
         with:
           tag_name: v${{ needs.check-version.outputs.local_version }}
           name: v${{ needs.check-version.outputs.local_version }}
