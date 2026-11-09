@@ -116,7 +116,7 @@ jobs:
           npx @vscode/vsce publish -p $VSCE_PAT
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           tag_name: v${{ needs.check-version.outputs.local_version }}
           name: v${{ needs.check-version.outputs.local_version }}
