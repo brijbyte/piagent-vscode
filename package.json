@@ -440,10 +440,10 @@
     "@vscode/chat-extension-utils": "^0.0.0-alpha.5"
   },
   "devDependencies": {
-    "@types/node": "^22.15.21",
+    "@types/node": "^26.6.6",
     "@types/vscode": "^1.100.0",
-    "@vscode/vsce": "^3.7.1",
+    "@vscode/vsce": "^4.1.1",
     "esbuild": "^0.27.3",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   }
 }
