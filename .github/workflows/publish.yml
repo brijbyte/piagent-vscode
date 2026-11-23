@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: '26.13.0'
+          node-version: '26.13.1'
 
       - name: Check version against marketplace
         id: check
@@ -96,7 +96,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: '26.13.0'
+          node-version: '26.13.1'
 
       - name: Install dependencies
         run: npm install
